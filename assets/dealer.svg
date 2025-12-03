@@ -1,0 +1,7 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+    <title id="title">Tiny Dealer Button</title>
+    <desc id="desc">Smaller white circle with a larger centered letter D</desc>
+    <circle cx="8" cy="8" r="7" fill="#FFFFFF" stroke="#000000" stroke-width="1"/>
+    <text x="8" y="8" text-anchor="middle" dominant-baseline="middle"
+        font-family="Arial, sans-serif" font-size="10" fill="#000000" font-weight="bold">D</text>
+</svg>

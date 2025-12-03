@@ -1,0 +1,41 @@
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 200 300"
+    preserveAspectRatio="xMidYMid meet"
+>
+    <!-- obramowanie karty -->
+    <rect
+        x="1" y="1" width="198" height="298"
+        fill="white"
+        stroke="black"
+        stroke-width="2"
+        rx="10" ry="10"
+    />
+
+    <!-- lewy górny róg: rank -->
+    <text
+        x="12" y="32"
+        font-family="Arial, sans-serif"
+        font-size="24"
+        font-weight="bold"
+        fill="{{color}}"
+    >{{rank}}</text>
+
+    <!-- pod rankiem symbol -->
+    <text
+        x="12" y="56"
+        font-family="Arial, sans-serif"
+        font-size="20"
+        fill="{{color}}"
+    >{{suitChar}}</text>
+
+    <!-- duży symbol na środku karty -->
+    <text
+        x="100" y="160"
+        text-anchor="middle"
+        font-family="Arial, sans-serif"
+        font-size="80"
+        fill="{{color}}"
+    >{{suitChar}}</text>
+</svg>
+
