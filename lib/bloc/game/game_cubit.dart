@@ -1962,11 +1962,17 @@ class GameCubit extends Cubit<GameState> {
           (r) => r,
     );
 
-    updateState(gameStarted: true, recalculateMyTurn: false);
-    print('AKTUALNY STAN: ${state.toString()}');
+    // Jeśli gra jeszcze nie wystartowała (według WS), uruchom lokalnie.
+    // Jeśli WS dotarł szybciej, to gameStarted jest już true, a sekwencja już ruszyła (w listenerze).
+    if (!state.gameStarted) {
+      updateState(gameStarted: true, recalculateMyTurn: false);
+      print('AKTUALNY STAN (startRound): ${state.toString()}');
 
-    // Uruchamiamy sekwencję dźwięku i kart
-    _playCardShuffleSequence();
+      // Uruchamiamy sekwencję dźwięku i kart
+      _playCardShuffleSequence();
+    } else {
+      print('Gra już wystartowała (przez WS) - pomijam lokalny startRound, aby uniknąć podwójnego tasowania');
+    }
   }
 
   Future<void> _playCardShuffleSequence() async {
