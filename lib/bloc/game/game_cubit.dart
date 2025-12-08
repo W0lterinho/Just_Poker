@@ -267,8 +267,15 @@ class GameCubit extends Cubit<GameState> {
       if (payload is Map<String, dynamic>) {
         // Nowa obsługa gameStarted: TRUE
         if (payload['gameStarted'] == true) {
+          final wasGameStarted = state.gameStarted;
           updateState(gameStarted: true, recalculateMyTurn: false);
           print("Ustawiono gameStarted na true na podstawie WS /topic/table/$tableCode");
+
+          // Jeśli gra nie była wcześniej rozpoczęta (np. Joiner), uruchom sekwencję tasowania
+          if (!wasGameStarted) {
+            print("Wykryto start gry (Joiner) - uruchamiam sekwencję tasowania");
+            _playCardShuffleSequence();
+          }
           return;
         }
 
@@ -479,6 +486,17 @@ class GameCubit extends Cubit<GameState> {
             if (_newRoundInProgress) {
               print('Nowa runda w toku - uruchamiam sekwencję dźwięku');
               _playNewRoundSequence();
+            }
+            // OBSŁUGA OPÓŹNIONYCH KART PRZY STARCIE:
+            // Jeśli gra wystartowała, animacja tasowania już się zakończyła (cardsVisible=true),
+            // ale nie mieliśmy wtedy kart (myCards=[]), to aktualizujemy je teraz.
+            else if (state.gameStarted && state.cardsVisible && state.myCards.isEmpty) {
+              print('Karty dotarły po animacji startowej (lub pusty stan) - aktualizuję natychmiast');
+              updateState(
+                myCards: _pendingCards,
+                recalculateMyTurn: false,
+              );
+              _pendingCards = [];
             }
             return;
           }
@@ -749,8 +767,15 @@ class GameCubit extends Cubit<GameState> {
       if (payload is Map<String, dynamic>) {
         // Nowa obsługa gameStarted: TRUE
         if (payload['gameStarted'] == true) {
+          final wasGameStarted = state.gameStarted;
           updateState(gameStarted: true, recalculateMyTurn: false);
           print("Ustawiono gameStarted na true na podstawie WS /topic/table/$tableCode");
+
+          // Jeśli gra nie była wcześniej rozpoczęta (np. Joiner), uruchom sekwencję tasowania
+          if (!wasGameStarted) {
+            print("Wykryto start gry (Joiner) - uruchamiam sekwencję tasowania");
+            _playCardShuffleSequence();
+          }
           return;
         }
 
@@ -987,6 +1012,17 @@ class GameCubit extends Cubit<GameState> {
             if (_newRoundInProgress) {
               print('Nowa runda w toku - uruchamiam sekwencję dźwięku');
               _playNewRoundSequence();
+            }
+            // OBSŁUGA OPÓŹNIONYCH KART PRZY STARCIE:
+            // Jeśli gra wystartowała, animacja tasowania już się zakończyła (cardsVisible=true),
+            // ale nie mieliśmy wtedy kart (myCards=[]), to aktualizujemy je teraz.
+            else if (state.gameStarted && state.cardsVisible && state.myCards.isEmpty) {
+              print('Karty dotarły po animacji startowej (lub pusty stan) - aktualizuję natychmiast');
+              updateState(
+                myCards: _pendingCards,
+                recalculateMyTurn: false,
+              );
+              _pendingCards = [];
             }
             // Jeśli nie nowa runda, NIE wywołujemy updateState z kartami - czekamy na sekwencję
             return;
