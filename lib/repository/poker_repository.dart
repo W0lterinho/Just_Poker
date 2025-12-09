@@ -44,6 +44,10 @@ class PokerRepository {
     required void Function(dynamic) onError,
     required void Function() onDisconnect,
   }) {
+    // Upewnij się, że stary klient jest zamknięty przed utworzeniem nowego
+    _stompClient?.deactivate();
+    _stompClient = null;
+
     final client = StompClient(
       config: StompConfig(
         url: _wsUrl,
@@ -51,7 +55,13 @@ class PokerRepository {
         onWebSocketError: onError,
         onStompError: (f) => onError(f.body),
         onDisconnect: (_) => onDisconnect(),
-        reconnectDelay: const Duration(seconds: 5),
+        // Wyłączamy automatyczny reconnect biblioteki (reconnectDelay: 0),
+        // ponieważ chcemy kontrolować logikę 25 prób * 5s ręcznie w Cubicie
+        // i zapewnić pełne czyszczenie ("Zombie Sockets").
+        reconnectDelay: const Duration(seconds: 0),
+        // Heartbeat co 10s (incoming & outgoing) zgodnie z wymaganiami
+        heartbeatIncoming: const Duration(seconds: 10),
+        heartbeatOutgoing: const Duration(seconds: 10),
       ),
     )..activate();
     _stompClient = client;
@@ -109,9 +119,23 @@ class PokerRepository {
       callback: (frame) {
         print('WS INCOMING on $topic: ${frame.body}'); // do wyświetlania logów
         try {
-          final json = jsonDecode(frame.body!) as Map<String, dynamic>;
-          controller.add(fromJson(json));
-        } catch (_) {}
+          // Use dynamic first to avoid cast exception if the format is unexpected
+          final dynamic decoded = jsonDecode(frame.body!);
+
+          if (decoded is Map<String, dynamic>) {
+             controller.add(fromJson(decoded));
+          } else {
+             print('WS Error: Expected Map<String, dynamic> but got ${decoded.runtimeType}');
+             // Attempt unsafe cast if necessary or handle other types if required
+             // But for now, just print error instead of swallowing it silently.
+             // If fromJson can handle it, maybe we can try:
+             // controller.add(fromJson(decoded as Map<String, dynamic>));
+             // But that would throw.
+          }
+        } catch (e, stack) {
+          print('WS Parsing Error on $topic: $e');
+          print(stack);
+        }
       },
     );
     if (topic.startsWith('/topic/user/')) {
