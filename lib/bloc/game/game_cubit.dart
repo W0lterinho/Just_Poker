@@ -923,47 +923,8 @@ class GameCubit extends Cubit<GameState> {
     }
   }
 
-
-  /*
-  // Ten fragment kodu zastępuję powyższym w init(),
-  // ponieważ musimy zdefiniować callbacki onConnect/onDisconnect PRZED subskrypcją.
-  // Stary init() od razu robił subskrypcję, która zakładała że klient istnieje?
-  // W repo subscribeTopic używa _stompClient!.
-  // Więc init musi najpierw stworzyć klienta.
-  */
-
-  // UWAGA: Wcześniejsza implementacja init() w tym pliku nie tworzyła klienta,
-  // tylko od razu wołała _repo.subscribeTopic.
-  // To sugeruje, że klient był tworzony gdzie indziej (np. w GameScreen albo PokerTablesScreen?).
-  // Ale GameScreen woła context.read<GameCubit>().init(widget.tableCode).
-  // Sprawdzę repository... createStompClient jest publiczne.
-  // Kto je woła? Z opisu zadania wynika że "nowe połączenie WebSocket" trzeba stworzyć.
-  // Wcześniej: "No" -> /freshJoin -> nowe połączenie -> PokerTablesScreen.
-  // W PokerTablesScreen pewnie jest createStompClient.
-  // ALE tutaj jesteśmy w GameScreen. Jeśli GameScreen jest otwarty, to połączenie już powinno być.
-  // Jednak przy RECONNECT (utrata neta) musimy je stworzyć od nowa.
-  // WIĘC: W init() musimy jednak upewnić się że mamy klienta LUB podpiąć callbacki jeśli już jest?
-  // StompClient w repo nie pozwala łatwo podmienić callbacków "w locie" po activate().
-  // Więc najlepiej w init() stworzyć klienta (lub go zresetować z naszymi callbackami).
-  // Zakładam że GameScreen przejmuje kontrolę nad połączeniem.
-
-  /*
-     Analiza obecnego kodu repository:
-     Metoda `createStompClient` jest w repo.
-     Metoda `subscribeTopic` używa `_stompClient!`.
-     Jeśli init() w Cubicie od razu robi subscribeTopic, to znaczy że zakłada że klient już jest.
-     Ale my chcemy obsłużyć reconnect. Więc musimy przejąć kontrolę nad `createStompClient`.
-  */
-
-  /*
-    Zmodyfikowana sekcja subscribeTopic - używana przez _handleReconnected oraz init
-  */
-
-  // 1) SUB na /topic/table/...
-    _tableSub = _repo.subscribeTopic<dynamic>(
-      '/topic/table/$tableCode',
-          (json) => json,
-    ).listen((payload) async {
+  // NOWE - ELIMINATION HANDLING METHODS (This line is not really here, just forcing the diff to span the gap)
+  /* DEAD CODE REMOVED */
       print('WS [table/$tableCode] payload: $payload');
 
       if (payload is Map<String, dynamic>) {
@@ -2114,35 +2075,6 @@ class GameCubit extends Cubit<GameState> {
     print('Uruchomiono timer usuwania akcji dla gracza $playerEmail (3 sekundy)');
   }
 
-  void _handlePlayersMap(Map<String, dynamic> raw, String me) {
-    print('*** W _handlePlayersMap, raw: $raw');
-    final opponents = <PlayerDto>[];
-    final allPlayers = <PlayerDto>[];
-    int? myChips;
-
-    raw.forEach((email, data) {
-      if (data is Map<String, dynamic>) {
-        final dto = PlayerDto.fromMap(data);
-        allPlayers.add(dto);
-        if (email == me) {
-          myChips = dto.chips;
-        } else {
-          opponents.add(dto);
-        }
-      }
-    });
-
-    allPlayers.sort((a, b) => a.seatIndex.compareTo(b.seatIndex));
-
-    updateState(
-      players: opponents,
-      myChips: myChips ?? state.myChips,
-      allPlayers: allPlayers,
-      localEmail: me,
-      recalculateMyTurn: true,
-    );
-    print('AKTUALNY STAN: ${state.toString()}');
-  }
 
   Future<void> startRound() async {
     final tableCode = _tableCode;
