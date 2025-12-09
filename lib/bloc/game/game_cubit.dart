@@ -658,21 +658,24 @@ class GameCubit extends Cubit<GameState> {
             return;
           }
 
-          // Obsługa StateDTO z user topic
+          // 3. Obsługa StateDTO (pul/nextPlayerMail/nextPlayerToCall)
           if (payload.containsKey('pot') && payload.containsKey('nextPlayerMail')) {
             try {
               final s = StateDTO.fromJson(payload);
               print('Otrzymano StateDTO z /user: pot=${s.pot}, nextPlayerMail=${s.nextPlayerMail}, nextPlayerToCall=${s.nextPlayerToCall}, actionPlayerMail=${s.actionPlayerMail}, action=${s.action}, chipsLeft=${s.chipsLeft}, chipsInRound=${s.chipsInRound}');
 
+              // NOWA LOGIKA - buforuj StateDTO podczas opóźnienia kart
               if (_delayingCommunityCards) {
                 print('BUFORUJĘ StateDTO podczas opóźnienia kart (user topic)');
                 print('  Zastosuje po pokazaniu kart');
 
+                // Zapisz StateDTO jako pending - zastosujemy po pokazaniu kart
                 _pendingStateDTO = s;
 
+                // ALE aktualizuj pot i akcję gracza natychmiast (widoczne od razu)
                 updateState(
                   pot: s.pot,
-                  recalculateMyTurn: false,
+                  recalculateMyTurn: false, // NIE aktualizujemy isMyTurn podczas blokady
                 );
 
                 if (s.actionPlayerMail != null) {
@@ -684,14 +687,16 @@ class GameCubit extends Cubit<GameState> {
                   );
                 }
               } else {
+                // Normalne flow - brak opóźnienia, zastosuj wszystko od razu
                 print('Stosuję StateDTO natychmiast (user topic) - brak opóźnienia');
                 updateState(
                   pot: s.pot,
                   nextPlayerMail: s.nextPlayerMail,
                   nextPlayerToCall: s.nextPlayerToCall,
-                  recalculateMyTurn: true,
+                  recalculateMyTurn: true, // WAŻNE - przeliczymy isMyTurn bo nextPlayerMail się zmieniło
                 );
 
+                // BLIND LOGIC - aktualizuj gracza jeśli są dane
                 if (s.actionPlayerMail != null) {
                   _updatePlayerBetsAndChips(
                     email: s.actionPlayerMail!,
@@ -709,7 +714,7 @@ class GameCubit extends Cubit<GameState> {
             return;
           }
 
-          // Obsługa pełnej mapy graczy
+          // 4. Obsługa pełnej mapy graczy!
           if (payload.values.isNotEmpty && payload.values.first is Map<String, dynamic> && (payload.values.first as Map<String, dynamic>).containsKey('seatIndex')) {
             print('PRZED _handlePlayersMap, payload: $payload');
             _handlePlayersMap(payload, userEmail);
@@ -719,8 +724,6 @@ class GameCubit extends Cubit<GameState> {
         }
       });
     }
-
-    print('Subskrypcje utworzone pomyślnie');
   }
 
   /// Aplikuje SyncDTO na stan gry (wspólna metoda dla init i update)
@@ -923,480 +926,6 @@ class GameCubit extends Cubit<GameState> {
     }
   }
 
-  // NOWE - ELIMINATION HANDLING METHODS (This line is not really here, just forcing the diff to span the gap)
-  /* DEAD CODE REMOVED */
-      print('WS [table/$tableCode] payload: $payload');
-
-      if (payload is Map<String, dynamic>) {
-        // Nowa obsługa gameStarted: TRUE
-        if (payload['gameStarted'] == true) {
-          final wasGameStarted = state.gameStarted;
-          updateState(gameStarted: true, recalculateMyTurn: false);
-          print("Ustawiono gameStarted na true na podstawie WS /topic/table/$tableCode");
-
-          // Jeśli gra nie była wcześniej rozpoczęta (np. Joiner), uruchom sekwencję tasowania
-          if (!wasGameStarted) {
-            print("Wykryto start gry (Joiner) - uruchamiam sekwencję tasowania");
-            _playCardShuffleSequence();
-          }
-          return;
-        }
-
-        // Obsługa DEKODERA DEALERA
-        if (payload['type'] == 'dealer') {
-          updateState(dealerMail: payload['object'] as String?, recalculateMyTurn: false);
-          return;
-        }
-
-        // NOWA OBSŁUGA - karty wspólne z akumulacją podczas opóźnienia
-        if (payload['type'] == 'community_cards') {
-          final object = payload['object'];
-
-          // Parsowanie - pojedyncza karta lub lista
-          List<String> cardsToAdd = [];
-
-          if (object is String) {
-            // Backend wysyła pojedynczą kartę
-            cardsToAdd = [object];
-            print('Otrzymano pojedynczą kartę wspólną: $object');
-          } else if (object is List) {
-            // Backend wysyła listę kart
-            cardsToAdd = List<String>.from(object);
-            print('Otrzymano listę kart wspólnych: $cardsToAdd');
-          } else {
-            print('Nieznany format community_cards: $object');
-            return;
-          }
-
-          // KLUCZOWA LOGIKA - sprawdź czy już opóźniamy karty
-          if (_delayingCommunityCards) {
-            // Jesteśmy w trakcie opóźnienia - AKUMULUJ karty
-            print('Akumuluję karty do pending (opóźnienie w toku): $cardsToAdd');
-            _pendingCommunityCards.addAll(cardsToAdd);
-            print('Pending cards teraz: $_pendingCommunityCards');
-          } else {
-            // Pierwsza karta w nowej fazie - ROZPOCZNIJ opóźnienie
-            print('NOWA FAZA - rozpoczynam opóźnienie 3s dla kart: $cardsToAdd');
-
-            // Zapisz karty jako pending
-            _pendingCommunityCards = List<String>.from(cardsToAdd);
-            _delayingCommunityCards = true;
-
-            // WAŻNE - Zablokuj isMyTurn natychmiast
-            updateState(recalculateMyTurn: true);
-
-            // Uruchom timer 3s (anuluj poprzedni na wszelki wypadek)
-            _communityCardsTimer?.cancel();
-            _communityCardsTimer = Timer(const Duration(seconds: 3), () {
-              _showPendingCommunityCards();
-            });
-
-            print('Timer 3s uruchomiony, pending cards: $_pendingCommunityCards');
-          }
-          return;
-        }
-
-        // NOWE - Obsługa kart do pokazania w SHOWDOWN
-        if (payload['type'] == 'cards_to_show') {
-          final cardsMap = payload['object'] as Map<String, dynamic>? ?? {};
-          final convertedMap = <String, List<String>>{};
-          cardsMap.forEach((email, cards) {
-            if (cards is List) {
-              convertedMap[email] = List<String>.from(cards);
-            }
-          });
-          print('Otrzymano karty do pokazania: $convertedMap');
-          _handleCardsToShow(convertedMap);
-          return;
-        }
-
-        // ZMIENIONE - Obsługa zwycięzców (type="winner")
-        if (payload['type'] == 'winner') {
-          final winnersObject = payload['object'];
-          if (winnersObject is List) {
-            final winnersDto = winnersObject.map((w) {
-              if (w is Map<String, dynamic>) {
-                return WinnerDTO.fromJson(w);
-              }
-              return null;
-            }).whereType<WinnerDTO>().toList();
-
-            print('Otrzymano zwycięzców (winner): ${winnersDto.map((w) => w.toString()).toList()}');
-            _handleWinners(winnersDto, isAllIn: false);
-          } else {
-            print('Nieznany format winner: $winnersObject');
-          }
-          return;
-        }
-
-        // NOWE - Obsługa zwycięzców ALL IN (type="winner_allin")
-        if (payload['type'] == 'winner_allin') {
-          final winnersObject = payload['object'];
-          if (winnersObject is List) {
-            final winnersDto = winnersObject.map((w) {
-              if (w is Map<String, dynamic>) {
-                return WinnerDTO.fromJson(w);
-              }
-              return null;
-            }).whereType<WinnerDTO>().toList();
-
-            print('Otrzymano zwycięzców (winner_allin): ${winnersDto.map((w) => w.toString()).toList()}');
-            _handleWinners(winnersDto, isAllIn: true);
-          } else {
-            print('Nieznany format winner_allin: $winnersObject');
-          }
-          return;
-        }
-
-        // NOWE - Obsługa showdown_cards (dodatkowe karty wspólne przy wcześniejszym showdown)
-        if (payload['type'] == 'showdown_cards') {
-          final cardsObject = payload['object'];
-          List<String> showdownCards;
-          if (cardsObject is List) {
-            showdownCards = List<String>.from(cardsObject);
-          } else {
-            print('Nieznany format showdown_cards: $cardsObject');
-            return;
-          }
-          print('Otrzymano showdown_cards: $showdownCards');
-          _handleShowdownCards(showdownCards);
-          return;
-        }
-
-        // NOWE - Obsługa wyeliminowanych graczy
-        if (payload['type'] == 'eliminated_players') {
-          final eliminatedObject = payload['object'];
-          List<String> eliminatedEmails;
-          if (eliminatedObject is List) {
-            eliminatedEmails = List<String>.from(eliminatedObject);
-          } else {
-            print('Nieznany format eliminated_players: $eliminatedObject');
-            return;
-          }
-          print('Otrzymano eliminated_players: $eliminatedEmails');
-          _handleEliminatedPlayers(eliminatedEmails);
-          return;
-        }
-
-        // NOWE - Obsługa zakończenia gry
-        if (payload['type'] == 'game_finished') {
-          final gameFinishedObject = payload['object'] as Map<String, dynamic>? ?? {};
-          final ultimateWinner = gameFinishedObject['ultimate_winner'] as String?;
-          print('Otrzymano game_finished z ultimate_winner: $ultimateWinner');
-          _handleGameFinished(ultimateWinner);
-          return;
-        }
-
-        // Obsługa StateDTO – update tylko określonych pól!
-        if (payload.containsKey('pot') || payload.containsKey('nextPlayerMail') || payload.containsKey('nextPlayerToCall')) {
-          try {
-            final s = StateDTO.fromJson(payload);
-
-            // NOWA LOGIKA - buforuj StateDTO podczas opóźnienia kart
-            if (_delayingCommunityCards) {
-              print('BUFORUJĘ StateDTO podczas opóźnienia kart (table topic)');
-              print('  pot: ${s.pot}');
-              print('  nextPlayerMail: ${s.nextPlayerMail}');
-              print('  nextPlayerToCall: ${s.nextPlayerToCall}');
-
-              // Zapisz StateDTO jako pending - zastosujemy po pokazaniu kart
-              _pendingStateDTO = s;
-
-              // ALE aktualizuj pot i akcję gracza natychmiast (widoczne od razu)
-              if (s.pot != null) {
-                updateState(
-                  pot: s.pot,
-                  recalculateMyTurn: false, // NIE aktualizujemy isMyTurn podczas blokady
-                );
-              }
-
-              if (s.actionPlayerMail != null) {
-                _updatePlayerBetsAndChips(
-                  email: s.actionPlayerMail!,
-                  chipsLeft: s.chipsLeft,
-                  chipsInRound: s.chipsInRound,
-                  action: s.action,
-                );
-              }
-            } else {
-              // Normalne flow - brak opóźnienia, zastosuj wszystko od razu
-              print('Stosuję StateDTO natychmiast (table topic) - brak opóźnienia');
-              updateState(
-                pot: s.pot ?? state.pot,
-                nextPlayerMail: s.nextPlayerMail ?? state.nextPlayerMail,
-                nextPlayerToCall: s.nextPlayerToCall ?? state.nextPlayerToCall,
-                recalculateMyTurn: true, // WAŻNE - przeliczymy isMyTurn bo nextPlayerMail się zmieniło
-              );
-
-              if (s.actionPlayerMail != null) {
-                _updatePlayerBetsAndChips(
-                  email: s.actionPlayerMail!,
-                  chipsLeft: s.chipsLeft,
-                  chipsInRound: s.chipsInRound,
-                  action: s.action,
-                );
-              }
-            }
-          } catch (e) {
-            print("Nieudane parsowanie StateDTO z /table: $e");
-          }
-          return;
-        }
-        print('Przechodzi przez handlePlayersMap z TABLE topic');
-        _handlePlayersMap(payload, me);
-      }
-
-      // OBSŁUGA STARSZEGO FORMATU - surowa lista kart wspólnych (dla kompatybilności)
-      else if (payload is List) {
-        final cards = List<String>.from(payload);
-        print('Otrzymano karty wspólne (stary format): $cards');
-        updateState(
-          communityCards: cards,
-          recalculateMyTurn: false,
-        );
-      }
-    });
-
-    // 2) subskrybuj temat użytkownika: karty + StateDTO + mapa graczy
-    if (me.isNotEmpty) {
-      _userSub = _repo.subscribeTopic<dynamic>(
-        '/topic/user/$me',
-            (json) => json,
-      ).listen((payload) {
-        print('WS [user/$me] payload: $payload | type: ${payload.runtimeType}');
-        if (payload is Map<String, dynamic>) {
-          // 1. Obsługa kart gracza - automatyczne uruchomienie sekwencji nowej rundy
-          if (payload['type'] == 'cards') {
-            final cards = List<String>.from(payload['object'] ?? []);
-            print('Otrzymano karty gracza lokalnego: $cards');
-            _pendingCards = cards;
-
-            // NOWE - Jeśli nowa runda jest w toku, uruchom sekwencję dźwięku
-            if (_newRoundInProgress) {
-              print('Nowa runda w toku - uruchamiam sekwencję dźwięku');
-              _playNewRoundSequence();
-            }
-            // OBSŁUGA OPÓŹNIONYCH KART PRZY STARCIE:
-            // Jeśli gra wystartowała, animacja tasowania już się zakończyła (cardsVisible=true),
-            // ale nie mieliśmy wtedy kart (myCards=[]), to aktualizujemy je teraz.
-            else if (state.gameStarted && state.cardsVisible && state.myCards.isEmpty) {
-              print('Karty dotarły po animacji startowej (lub pusty stan) - aktualizuję natychmiast');
-              updateState(
-                myCards: _pendingCards,
-                recalculateMyTurn: false,
-              );
-              _pendingCards = [];
-            }
-            // Jeśli nie nowa runda, NIE wywołujemy updateState z kartami - czekamy na sekwencję
-            return;
-          }
-
-          // NOWA OBSŁUGA - karty wspólne z akumulacją podczas opóźnienia
-          if (payload['type'] == 'community_cards') {
-            final object = payload['object'];
-
-            // Parsowanie - pojedyncza karta lub lista
-            List<String> cardsToAdd = [];
-
-            if (object is String) {
-              // Backend wysyła pojedynczą kartę
-              cardsToAdd = [object];
-              print('Otrzymano pojedynczą kartę wspólną: $object');
-            } else if (object is List) {
-              // Backend wysyła listę kart
-              cardsToAdd = List<String>.from(object);
-              print('Otrzymano listę kart wspólnych: $cardsToAdd');
-            } else {
-              print('Nieznany format community_cards: $object');
-              return;
-            }
-
-            // KLUCZOWA LOGIKA - sprawdź czy już opóźniamy karty
-            if (_delayingCommunityCards) {
-              // Jesteśmy w trakcie opóźnienia - AKUMULUJ karty
-              print('Akumuluję karty do pending (opóźnienie w toku): $cardsToAdd');
-              _pendingCommunityCards.addAll(cardsToAdd);
-              print('Pending cards teraz: $_pendingCommunityCards');
-            } else {
-              // Pierwsza karta w nowej fazie - ROZPOCZNIJ opóźnienie
-              print('NOWA FAZA - rozpoczynam opóźnienie 3s dla kart: $cardsToAdd');
-
-              // Zapisz karty jako pending
-              _pendingCommunityCards = List<String>.from(cardsToAdd);
-              _delayingCommunityCards = true;
-
-              // WAŻNE - Zablokuj isMyTurn natychmiast
-              updateState(recalculateMyTurn: true);
-
-              // Uruchom timer 3s (anuluj poprzedni na wszelki wypadek)
-              _communityCardsTimer?.cancel();
-              _communityCardsTimer = Timer(const Duration(seconds: 3), () {
-                _showPendingCommunityCards();
-              });
-
-              print('Timer 3s uruchomiony, pending cards: $_pendingCommunityCards');
-            }
-            return;
-          }
-
-          // NOWE - Obsługa kart do pokazania w SHOWDOWN (może przyjść też przez user topic)
-          if (payload['type'] == 'cards_to_show') {
-            final cardsMap = payload['object'] as Map<String, dynamic>? ?? {};
-            final convertedMap = <String, List<String>>{};
-            cardsMap.forEach((email, cards) {
-              if (cards is List) {
-                convertedMap[email] = List<String>.from(cards);
-              }
-            });
-            print('Otrzymano karty do pokazania (user topic): $convertedMap');
-            _handleCardsToShow(convertedMap);
-            return;
-          }
-
-          // ZMIENIONE - Obsługa zwycięzców (może przyjść też przez user topic)
-          if (payload['type'] == 'winner') {
-            final winnersObject = payload['object'];
-            if (winnersObject is List) {
-              final winnersDto = winnersObject.map((w) {
-                if (w is Map<String, dynamic>) {
-                  return WinnerDTO.fromJson(w);
-                }
-                return null;
-              }).whereType<WinnerDTO>().toList();
-
-              print('Otrzymano zwycięzców (winner, user topic): ${winnersDto.map((w) => w.toString()).toList()}');
-              _handleWinners(winnersDto, isAllIn: false);
-            } else {
-              print('Nieznany format winner (user topic): $winnersObject');
-            }
-            return;
-          }
-
-          // NOWE - Obsługa zwycięzców ALL IN (może przyjść też przez user topic)
-          if (payload['type'] == 'winner_allin') {
-            final winnersObject = payload['object'];
-            if (winnersObject is List) {
-              final winnersDto = winnersObject.map((w) {
-                if (w is Map<String, dynamic>) {
-                  return WinnerDTO.fromJson(w);
-                }
-                return null;
-              }).whereType<WinnerDTO>().toList();
-
-              print('Otrzymano zwycięzców (winner_allin, user topic): ${winnersDto.map((w) => w.toString()).toList()}');
-              _handleWinners(winnersDto, isAllIn: true);
-            } else {
-              print('Nieznany format winner_allin (user topic): $winnersObject');
-            }
-            return;
-          }
-
-          // NOWE - Obsługa showdown_cards (może przyjść też przez user topic)
-          if (payload['type'] == 'showdown_cards') {
-            final cardsObject = payload['object'];
-            List<String> showdownCards;
-            if (cardsObject is List) {
-              showdownCards = List<String>.from(cardsObject);
-            } else {
-              print('Nieznany format showdown_cards (user topic): $cardsObject');
-              return;
-            }
-            print('Otrzymano showdown_cards (user topic): $showdownCards');
-            _handleShowdownCards(showdownCards);
-            return;
-          }
-
-          // NOWE - Obsługa wyeliminowanych graczy (może przyjść też przez user topic)
-          if (payload['type'] == 'eliminated_players') {
-            final eliminatedObject = payload['object'];
-            List<String> eliminatedEmails;
-            if (eliminatedObject is List) {
-              eliminatedEmails = List<String>.from(eliminatedObject);
-            } else {
-              print('Nieznany format eliminated_players (user topic): $eliminatedObject');
-              return;
-            }
-            print('Otrzymano eliminated_players (user topic): $eliminatedEmails');
-            _handleEliminatedPlayers(eliminatedEmails);
-            return;
-          }
-
-          // NOWE - Obsługa zakończenia gry (może przyjść też przez user topic)
-          if (payload['type'] == 'game_finished') {
-            final gameFinishedObject = payload['object'] as Map<String, dynamic>? ?? {};
-            final ultimateWinner = gameFinishedObject['ultimate_winner'] as String?;
-            print('Otrzymano game_finished z ultimate_winner (user topic): $ultimateWinner');
-            _handleGameFinished(ultimateWinner);
-            return;
-          }
-
-          // 3. Obsługa StateDTO (pul/nextPlayerMail/nextPlayerToCall)
-          if (payload.containsKey('pot') && payload.containsKey('nextPlayerMail')) {
-            try {
-              final s = StateDTO.fromJson(payload);
-              print('Otrzymano StateDTO z /user: pot=${s.pot}, nextPlayerMail=${s.nextPlayerMail}, nextPlayerToCall=${s.nextPlayerToCall}, actionPlayerMail=${s.actionPlayerMail}, action=${s.action}, chipsLeft=${s.chipsLeft}, chipsInRound=${s.chipsInRound}');
-
-              // NOWA LOGIKA - buforuj StateDTO podczas opóźnienia kart
-              if (_delayingCommunityCards) {
-                print('BUFORUJĘ StateDTO podczas opóźnienia kart (user topic)');
-                print('  Zastosuje po pokazaniu kart');
-
-                // Zapisz StateDTO jako pending - zastosujemy po pokazaniu kart
-                _pendingStateDTO = s;
-
-                // ALE aktualizuj pot i akcję gracza natychmiast (widoczne od razu)
-                updateState(
-                  pot: s.pot,
-                  recalculateMyTurn: false, // NIE aktualizujemy isMyTurn podczas blokady
-                );
-
-                if (s.actionPlayerMail != null) {
-                  _updatePlayerBetsAndChips(
-                    email: s.actionPlayerMail!,
-                    chipsLeft: s.chipsLeft,
-                    chipsInRound: s.chipsInRound,
-                    action: s.action,
-                  );
-                }
-              } else {
-                // Normalne flow - brak opóźnienia, zastosuj wszystko od razu
-                print('Stosuję StateDTO natychmiast (user topic) - brak opóźnienia');
-                updateState(
-                  pot: s.pot,
-                  nextPlayerMail: s.nextPlayerMail,
-                  nextPlayerToCall: s.nextPlayerToCall,
-                  recalculateMyTurn: true, // WAŻNE - przeliczymy isMyTurn bo nextPlayerMail się zmieniło
-                );
-
-                // BLIND LOGIC - aktualizuj gracza jeśli są dane
-                if (s.actionPlayerMail != null) {
-                  _updatePlayerBetsAndChips(
-                    email: s.actionPlayerMail!,
-                    chipsLeft: s.chipsLeft,
-                    chipsInRound: s.chipsInRound,
-                    action: s.action,
-                  );
-                }
-              }
-
-              print('AKTUALNY STAN: ${state.toString()}');
-            } catch (e) {
-              print("Nieudane parsowanie StateDTO z /user: $e");
-            }
-            return;
-          }
-
-          // 4. Obsługa pełnej mapy graczy!
-          if (payload.values.isNotEmpty && payload.values.first is Map<String, dynamic> && (payload.values.first as Map<String, dynamic>).containsKey('seatIndex')) {
-            print('PRZED _handlePlayersMap, payload: $payload');
-            _handlePlayersMap(payload, me);
-            print('PO _handlePlayersMap');
-            return;
-          }
-        }
-      });
-    }
-  }
   // NOWE - ELIMINATION HANDLING METHODS
 
   void _handleEliminatedPlayers(List<String> eliminatedEmails) {
@@ -2075,6 +1604,35 @@ class GameCubit extends Cubit<GameState> {
     print('Uruchomiono timer usuwania akcji dla gracza $playerEmail (3 sekundy)');
   }
 
+  void _handlePlayersMap(Map<String, dynamic> raw, String me) {
+    print('*** W _handlePlayersMap, raw: $raw');
+    final opponents = <PlayerDto>[];
+    final allPlayers = <PlayerDto>[];
+    int? myChips;
+
+    raw.forEach((email, data) {
+      if (data is Map<String, dynamic>) {
+        final dto = PlayerDto.fromMap(data);
+        allPlayers.add(dto);
+        if (email == me) {
+          myChips = dto.chips;
+        } else {
+          opponents.add(dto);
+        }
+      }
+    });
+
+    allPlayers.sort((a, b) => a.seatIndex.compareTo(b.seatIndex));
+
+    updateState(
+      players: opponents,
+      myChips: myChips ?? state.myChips,
+      allPlayers: allPlayers,
+      localEmail: me,
+      recalculateMyTurn: true,
+    );
+    print('AKTUALNY STAN: ${state.toString()}');
+  }
 
   Future<void> startRound() async {
     final tableCode = _tableCode;
