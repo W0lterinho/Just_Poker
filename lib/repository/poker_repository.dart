@@ -44,6 +44,10 @@ class PokerRepository {
     required void Function(dynamic) onError,
     required void Function() onDisconnect,
   }) {
+    // Upewnij się, że stary klient jest zamknięty przed utworzeniem nowego
+    _stompClient?.deactivate();
+    _stompClient = null;
+
     final client = StompClient(
       config: StompConfig(
         url: _wsUrl,
@@ -51,7 +55,13 @@ class PokerRepository {
         onWebSocketError: onError,
         onStompError: (f) => onError(f.body),
         onDisconnect: (_) => onDisconnect(),
-        reconnectDelay: const Duration(seconds: 5),
+        // Wyłączamy automatyczny reconnect biblioteki (reconnectDelay: 0),
+        // ponieważ chcemy kontrolować logikę 25 prób * 5s ręcznie w Cubicie
+        // i zapewnić pełne czyszczenie ("Zombie Sockets").
+        reconnectDelay: const Duration(seconds: 0),
+        // Heartbeat co 10s (incoming & outgoing) zgodnie z wymaganiami
+        heartbeatIncoming: const Duration(seconds: 10),
+        heartbeatOutgoing: const Duration(seconds: 10),
       ),
     )..activate();
     _stompClient = client;

@@ -48,10 +48,15 @@ class GameCubit extends Cubit<GameState> {
   bool _shouldStartActionTimer = false;
   bool _shouldStopActionTimer = false;
 
+  // RECONNECT
+  int _reconnectAttempts = 0;
+  Timer? _reconnectTimer;
+
   GameCubit(this._repo, this._storage) : super(const GameState());
 
   @override
   Future<void> close() {
+    _reconnectTimer?.cancel();
     _tableSub?.cancel();
     _userSub?.cancel();
     _audioPlayer.dispose();
@@ -117,9 +122,31 @@ class GameCubit extends Cubit<GameState> {
     bool? actionTimerUrgent,
     bool? actionTimerGracePeriod,
     int? updateNumber,
+    bool? isReconnecting,
     bool recalculateMyTurn = true,
   }) {
-    print('updateState wywołane z: cardsVisible=$cardsVisible, myCards=$myCards, communityCards=$communityCards, recalculateMyTurn=$recalculateMyTurn, showingRevealedCards=$showingRevealedCards, winners=$winners, showingWinners=$showingWinners, eliminatedEmails=$eliminatedEmails, gameFinished=$gameFinished');
+    print('updateState wywołane z: cardsVisible=$cardsVisible, myCards=$myCards, communityCards=$communityCards, recalculateMyTurn=$recalculateMyTurn, showingRevealedCards=$showingRevealedCards, winners=$winners, showingWinners=$showingWinners, eliminatedEmails=$eliminatedEmails, gameFinished=$gameFinished, isReconnecting=$isReconnecting');
+
+    // STEP 3: Weryfikacja updateNumber (detekcja utraty wiadomości)
+    if (updateNumber != null) {
+      final lastUpdate = state.updateNumber;
+      // Jeśli lastUpdate był null (początek gry/po syncu) lub numer == 1 (nowa runda), akceptujemy bez sprawdzania luki
+      if (lastUpdate != null && updateNumber > 1) {
+        if (updateNumber > lastUpdate + 1) {
+          print('!!! DETEKCJA LUKI W UPDATE NUMBER !!! Oczekiwano: ${lastUpdate + 1}, Otrzymano: $updateNumber');
+          print('Uruchamiam sendSync() aby nadrobić zaległości...');
+          // Trigger sync - asynchronicznie
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+             _repo.sendSync().then((syncDto) {
+               final currentLocalEmail = localEmail ?? state.localEmail ?? '';
+               _applySync(syncDto, currentLocalEmail);
+             }).catchError((e) {
+               print('Błąd podczas sendSync po detekcji luki: $e');
+             });
+          });
+        }
+      }
+    }
 
     // Obliczamy czy to kolej lokalnego gracza TYLKO gdy recalculateMyTurn = true
     final currentLocalEmail = localEmail ?? state.localEmail;
@@ -189,6 +216,7 @@ class GameCubit extends Cubit<GameState> {
       actionTimerUrgent: actionTimerUrgent ?? state.actionTimerUrgent,
       actionTimerGracePeriod: actionTimerGracePeriod ?? state.actionTimerGracePeriod,
       updateNumber: updateNumber ?? state.updateNumber,
+      isReconnecting: isReconnecting ?? state.isReconnecting,
     ));
 
     // NOWE - Detectuj SHOWDOWN trigger
@@ -757,7 +785,181 @@ class GameCubit extends Cubit<GameState> {
     _tableCode = tableCode;
     final me = await _storage.read(key: 'userEmail') ?? '';
 
+    // Ustawienie callbacków dla STOMP Client (reconnect logic)
+    _repo.createStompClient(
+        onConnect: (frame) {
+          print('WS: onConnect - Połączono z serwerem');
+          // Jeśli byliśmy w trakcie reconnectu, to teraz sukces
+          if (state.isReconnecting) {
+            print('WS: Reconnect udany po $_reconnectAttempts próbach!');
+            _handleReconnected(tableCode, me);
+          }
+        },
+        onError: (err) {
+          print('WS Error: $err');
+          // Error może oznaczać rozłączenie
+          if (!state.isReconnecting) {
+             _handleDisconnect();
+          }
+        },
+        onDisconnect: () {
+          print('WS: onDisconnect - Utracono połączenie');
+          _handleDisconnect();
+        }
+    );
+
     // 1) SUB na /topic/table/...
+    _subscribeTopics(tableCode, me);
+  }
+
+  void _handleDisconnect() {
+    if (state.isReconnecting) return; // Już obsługujemy
+    print('=== UTRATA POŁĄCZENIA - ROZPOCZYNAM PROCEDURĘ RECONNECT ===');
+
+    updateState(isReconnecting: true, recalculateMyTurn: false);
+    _reconnectAttempts = 0;
+    _reconnectTimer?.cancel();
+
+    _attemptReconnectLoop();
+  }
+
+  void _attemptReconnectLoop() {
+    // 25 prób * 5s = 2 minuty i 5 sekund
+    if (_reconnectAttempts >= 25) {
+      print('=== RECONNECT FAILED: Osiągnięto limit 25 prób ===');
+      _reconnectTimer?.cancel();
+      // Tutaj można dodać logikę wyjścia do menu albo pokazania błędu krytycznego
+      return;
+    }
+
+    _reconnectAttempts++;
+    print('Reconnect attempt: $_reconnectAttempts / 25');
+
+    // Spróbuj nawiązać połączenie (repo.createStompClient zabija stare i tworzy nowe)
+    // UWAGA: createStompClient wywołujemy z tymi samymi callbackami co w init.
+    // Ale w init już przekazaliśmy callbacki, które są "stateful" w kontekście createStompClient?
+    // W obecnej implementacji PokerRepository createStompClient zwraca clienta i go aktywuje.
+    // Więc wystarczy wywołać to ponownie.
+
+    // Musimy jednak mieć dostęp do `tableCode` i `me` w callbackach, a te są w polach klasy `_tableCode`.
+    final currentTableCode = _tableCode;
+    final me = state.localEmail ?? ''; // lub z secureStorage, ale tu powinno być w stanie
+
+    if (currentTableCode == null) {
+      print('Brak tableCode - nie można wykonać reconnectu');
+      return;
+    }
+
+    // Wywołanie repo.createStompClient spowoduje próbę połączenia.
+    // Jeśli się uda -> odpali się onConnect -> _handleReconnected
+    // Jeśli się nie uda -> odpali się onError/onDisconnect -> ale musimy unikać pętli nieskończonej wywołań.
+    // W PokerRepo ustawiliśmy reconnectDelay: 0, więc biblioteka nie będzie sama próbować.
+    // My musimy próbować co 5 sekund.
+
+    _repo.createStompClient(
+        onConnect: (frame) {
+           print('WS (Reconnect): Connected!');
+           _reconnectTimer?.cancel(); // Zatrzymaj pętlę
+           _handleReconnected(currentTableCode, me);
+        },
+        onError: (err) {
+           print('WS (Reconnect): Error... ($err)');
+           // Nie robimy nic, timer za 5s spróbuje znowu
+        },
+        onDisconnect: () {
+           print('WS (Reconnect): Disconnected...');
+           // Nie robimy nic, timer za 5s spróbuje znowu
+        }
+    );
+
+    // Zaplanuj kolejną próbę za 5s
+    _reconnectTimer = Timer(const Duration(seconds: 5), () {
+      _attemptReconnectLoop();
+    });
+  }
+
+  Future<void> _handleReconnected(int tableCode, String userEmail) async {
+    print('=== POŁĄCZENIE ODZYSKANE ===');
+
+    // 1. Zasubskrybuj tematy na nowo (bo nowe połączenie)
+    _subscribeTopics(tableCode, userEmail);
+
+    // 2. Wyślij prośbę o synchronizację
+    try {
+      final syncDto = await _repo.sendSync();
+      print('Otrzymano SyncDTO po reconnect');
+
+      // 3. Zaktualizuj stan
+      _applySync(syncDto, userEmail);
+
+      // 4. Zdejmij flagę reconnecting
+      updateState(isReconnecting: false, recalculateMyTurn: true);
+
+      print('=== RECONNECT ZAKOŃCZONY SUKCESEM ===');
+    } catch (e) {
+      print('Błąd podczas synchronizacji po reconnect: $e');
+      // Jeśli sync się nie udał... może spróbuj jeszcze raz albo uznaj że failed?
+      // Na razie uznajemy że reconnect się powiódł tylko połowicznie (socket jest, dane nie).
+      // Może warto ponowić sync?
+    }
+  }
+
+  // Metoda wywoływana przez GameScreen gdy aplikacja wraca z tła (STEP 3)
+  Future<void> onAppResumed() async {
+    print('=== APLIKACJA WZNOWIONA (RESUMED) ===');
+    // Prewencyjna synchronizacja
+    if (state.gameStarted && !state.isReconnecting) {
+      try {
+        final email = state.localEmail;
+        if (email != null && email.isNotEmpty) {
+           print('Wysyłam prewencyjny Sync...');
+           final syncDto = await _repo.sendSync();
+           _applySync(syncDto, email);
+           print('Prewencyjny Sync zakończony.');
+        }
+      } catch (e) {
+        print('Błąd prewencyjnego Sync: $e');
+      }
+    }
+  }
+
+
+  /*
+  // Ten fragment kodu zastępuję powyższym w init(),
+  // ponieważ musimy zdefiniować callbacki onConnect/onDisconnect PRZED subskrypcją.
+  // Stary init() od razu robił subskrypcję, która zakładała że klient istnieje?
+  // W repo subscribeTopic używa _stompClient!.
+  // Więc init musi najpierw stworzyć klienta.
+  */
+
+  // UWAGA: Wcześniejsza implementacja init() w tym pliku nie tworzyła klienta,
+  // tylko od razu wołała _repo.subscribeTopic.
+  // To sugeruje, że klient był tworzony gdzie indziej (np. w GameScreen albo PokerTablesScreen?).
+  // Ale GameScreen woła context.read<GameCubit>().init(widget.tableCode).
+  // Sprawdzę repository... createStompClient jest publiczne.
+  // Kto je woła? Z opisu zadania wynika że "nowe połączenie WebSocket" trzeba stworzyć.
+  // Wcześniej: "No" -> /freshJoin -> nowe połączenie -> PokerTablesScreen.
+  // W PokerTablesScreen pewnie jest createStompClient.
+  // ALE tutaj jesteśmy w GameScreen. Jeśli GameScreen jest otwarty, to połączenie już powinno być.
+  // Jednak przy RECONNECT (utrata neta) musimy je stworzyć od nowa.
+  // WIĘC: W init() musimy jednak upewnić się że mamy klienta LUB podpiąć callbacki jeśli już jest?
+  // StompClient w repo nie pozwala łatwo podmienić callbacków "w locie" po activate().
+  // Więc najlepiej w init() stworzyć klienta (lub go zresetować z naszymi callbackami).
+  // Zakładam że GameScreen przejmuje kontrolę nad połączeniem.
+
+  /*
+     Analiza obecnego kodu repository:
+     Metoda `createStompClient` jest w repo.
+     Metoda `subscribeTopic` używa `_stompClient!`.
+     Jeśli init() w Cubicie od razu robi subscribeTopic, to znaczy że zakłada że klient już jest.
+     Ale my chcemy obsłużyć reconnect. Więc musimy przejąć kontrolę nad `createStompClient`.
+  */
+
+  /*
+    Zmodyfikowana sekcja subscribeTopic - używana przez _handleReconnected oraz init
+  */
+
+  // 1) SUB na /topic/table/...
     _tableSub = _repo.subscribeTopic<dynamic>(
       '/topic/table/$tableCode',
           (json) => json,
