@@ -43,6 +43,7 @@ class PokerRepository {
     required void Function(StompFrame) onConnect,
     required void Function(dynamic) onError,
     required void Function() onDisconnect,
+    Duration reconnectDelay = const Duration(seconds: 5),
   }) {
     final client = StompClient(
       config: StompConfig(
@@ -51,7 +52,7 @@ class PokerRepository {
         onWebSocketError: onError,
         onStompError: (f) => onError(f.body),
         onDisconnect: (_) => onDisconnect(),
-        reconnectDelay: const Duration(seconds: 5),
+        reconnectDelay: reconnectDelay,
       ),
     )..activate();
     _stompClient = client;

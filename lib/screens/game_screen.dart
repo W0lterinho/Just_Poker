@@ -29,12 +29,13 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _requestedPlayers = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // Obserwator cyklu życia
 
     // Sprawdź czy to reconnect czy normalny flow
     if (widget.syncDto != null) {
@@ -54,6 +55,20 @@ class _GameScreenState extends State<GameScreen> {
           context.read<GameCubit>().sendPlayersRequest();
         }
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('GameScreen: App Resumed - Triggering Cubit check');
+      context.read<GameCubit>().onAppResumed();
     }
   }
 
@@ -223,6 +238,39 @@ class _GameScreenState extends State<GameScreen> {
                 UltimateWinnerOverlay(
                   ultimateWinner: state.ultimateWinner!,
                   onBackToLobby: _handleBackToLobby,
+                ),
+
+              // NOWE - RECONNECT OVERLAY (Absolutnie najwyższa warstwa blokująca)
+              if (state.isReconnecting)
+                Container(
+                  color: Colors.black.withOpacity(0.85),
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Colors.white),
+                        SizedBox(height: 20),
+                        Text(
+                          'Reconnecting...',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'Please wait while we restore your connection',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 16,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
             ],
           );
