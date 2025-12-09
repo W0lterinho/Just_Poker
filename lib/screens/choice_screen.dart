@@ -27,7 +27,8 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
   bool _showJoinForm = false;
   bool _joining     = false;
   String? _errorMsg;
-  late var _stompClient;  //
+  dynamic _stompClient;  // Zmienione na dynamic/nullable
+  Timer? _reconnectTimer; // Timer do cleanupu
 
   final _nickCtrl = TextEditingController();
   bool _reconnecting = false; // Flaga dla reconnect flow
@@ -44,6 +45,10 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
+    if (_stompClient != null && _stompClient.connected) {
+       _stompClient.deactivate();
+    }
     _nickCtrl.removeListener(() {}); // choć niekonieczne przy jednowątkowym listenerze
     _nickCtrl.dispose();
     super.dispose();
@@ -117,31 +122,42 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
       _stompClient = repo.createStompClient(
         onConnect: (frame) {
           print('WebSocket połączony - nawiguję do PokerTablesScreen');
-          Navigator.pushReplacementNamed(
-            context,
-            PokerTablesScreen.routeName,
-          );
+          if (mounted) {
+            Navigator.pushReplacementNamed(
+              context,
+              PokerTablesScreen.routeName,
+            );
+          }
         },
         onError: (error) {
           print('WebSocket error: $error');
-          setState(() {
-            _errorMsg = 'WebSocket error: $error';
-          });
+          if (mounted) {
+            setState(() {
+              _errorMsg = 'WebSocket error: $error';
+            });
+          }
         },
         onDisconnect: () {
           print('WebSocket disconnected - retry logic');
-          Timer.periodic(retryInterval, (timer) {
+          _reconnectTimer?.cancel();
+          _reconnectTimer = Timer.periodic(retryInterval, (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
             retryCount++;
-            if (_stompClient.connected) {
+            if (_stompClient != null && _stompClient.connected) {
               timer.cancel();
             } else if (retryCount <= maxRetries) {
-              _stompClient.activate();
+              _stompClient?.activate();
             } else {
               timer.cancel();
-              Navigator.pushReplacementNamed(
-                context,
-                ChoiceScreen.routeName,
-              );
+              if (mounted) {
+                Navigator.pushReplacementNamed(
+                  context,
+                  ChoiceScreen.routeName,
+                );
+              }
             }
           });
         },
@@ -271,29 +287,40 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
 
       _stompClient = repo.createStompClient(
         onConnect: (frame) {
-          Navigator.pushReplacementNamed(
-            context,
-            PokerTablesScreen.routeName,
-          );
+          if (mounted) {
+            Navigator.pushReplacementNamed(
+              context,
+              PokerTablesScreen.routeName,
+            );
+          }
         },
         onError: (error) {
-          setState(() {
-            _errorMsg = 'WebSocket error: $error';
-          });
+          if (mounted) {
+            setState(() {
+              _errorMsg = 'WebSocket error: $error';
+            });
+          }
         },
         onDisconnect: () {
-          Timer.periodic(retryInterval, (timer) {
+          _reconnectTimer?.cancel();
+          _reconnectTimer = Timer.periodic(retryInterval, (timer) {
+            if (!mounted) {
+              timer.cancel();
+              return;
+            }
             retryCount++;
-            if (_stompClient.connected) {
+            if (_stompClient != null && _stompClient.connected) {
               timer.cancel();
             } else if (retryCount <= maxRetries) {
-              _stompClient.activate();
+              _stompClient?.activate();
             } else {
               timer.cancel();
-              Navigator.pushReplacementNamed(
-                context,
-                ChoiceScreen.routeName,
-              );
+              if (mounted) {
+                Navigator.pushReplacementNamed(
+                  context,
+                  ChoiceScreen.routeName,
+                );
+              }
             }
           });
         },
