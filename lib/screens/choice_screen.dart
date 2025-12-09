@@ -27,8 +27,9 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
   bool _showJoinForm = false;
   bool _joining     = false;
   String? _errorMsg;
-  dynamic _stompClient;  // Zmienione na dynamic/nullable
-  Timer? _reconnectTimer; // Timer do cleanupu
+  dynamic _stompClient;
+  Timer? _reconnectTimer;
+  bool _navigatedAway = false; // Flaga czy udało się przejść dalej
 
   final _nickCtrl = TextEditingController();
   bool _reconnecting = false; // Flaga dla reconnect flow
@@ -46,10 +47,12 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
   @override
   void dispose() {
     _reconnectTimer?.cancel();
-    if (_stompClient != null && _stompClient.connected) {
+    // Deaktywuj klienta TYLKO jeśli NIE przeszliśmy pomyślnie dalej.
+    // Jeśli przeszliśmy (_navigatedAway == true), chcemy zachować połączenie dla PokerTablesScreen.
+    if (!_navigatedAway && _stompClient != null && _stompClient.connected) {
        _stompClient.deactivate();
     }
-    _nickCtrl.removeListener(() {}); // choć niekonieczne przy jednowątkowym listenerze
+    _nickCtrl.removeListener(() {});
     _nickCtrl.dispose();
     super.dispose();
   }
@@ -114,60 +117,41 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
 
       print('Fresh join successful - nawiązuję WebSocket connection');
 
-      // 2. Nawiąż połączenie WebSocket (identycznie jak w normalnym flow)
-      int retryCount = 0;
-      const retryInterval = Duration(seconds: 5);
-      const maxRetries = 12; // 12*5s = 60s
+      // 2. Nawiąż połączenie WebSocket używając Completer, aby uniknąć callback hell i błędów z context
+      final completer = Completer<void>();
 
       _stompClient = repo.createStompClient(
         onConnect: (frame) {
-          print('WebSocket połączony - nawiguję do PokerTablesScreen');
-          if (mounted) {
-            Navigator.pushReplacementNamed(
-              context,
-              PokerTablesScreen.routeName,
-            );
-          }
+          print('WebSocket połączony');
+          if (!completer.isCompleted) completer.complete();
         },
         onError: (error) {
           print('WebSocket error: $error');
-          if (mounted) {
-            setState(() {
-              _errorMsg = 'WebSocket error: $error';
-            });
-          }
+          if (!completer.isCompleted) completer.completeError(error);
         },
         onDisconnect: () {
-          print('WebSocket disconnected - retry logic');
-          _reconnectTimer?.cancel();
-          _reconnectTimer = Timer.periodic(retryInterval, (timer) {
-            if (!mounted) {
-              timer.cancel();
-              return;
-            }
-            retryCount++;
-            if (_stompClient != null && _stompClient.connected) {
-              timer.cancel();
-            } else if (retryCount <= maxRetries) {
-              _stompClient?.activate();
-            } else {
-              timer.cancel();
-              if (mounted) {
-                Navigator.pushReplacementNamed(
-                  context,
-                  ChoiceScreen.routeName,
-                );
-              }
-            }
-          });
+          print('WebSocket disconnected');
         },
       );
 
+      // Czekaj na połączenie
+      await completer.future.timeout(const Duration(seconds: 15));
+
+      if (mounted) {
+        _navigatedAway = true; // Zaznacz sukces
+        Navigator.pushReplacementNamed(
+          context,
+          PokerTablesScreen.routeName,
+        );
+      }
+
     } catch (e) {
       print('Błąd podczas fresh join: $e');
-      setState(() {
-        _errorMsg = 'Fresh join failed: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMsg = 'Fresh join failed: $e';
+        });
+      }
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -280,63 +264,47 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
     try {
       await repo.joinPoker(nickName: nick);
 
-      // Join succeeded - normal flow
-      int retryCount = 0;
-      const retryInterval = Duration(seconds: 5);
-      const maxRetries = 12; // 12*5s = 60s
+      // Używamy Completer do oczekiwania na połączenie
+      final completer = Completer<void>();
 
       _stompClient = repo.createStompClient(
         onConnect: (frame) {
-          if (mounted) {
-            Navigator.pushReplacementNamed(
-              context,
-              PokerTablesScreen.routeName,
-            );
-          }
+          if (!completer.isCompleted) completer.complete();
         },
         onError: (error) {
-          if (mounted) {
-            setState(() {
-              _errorMsg = 'WebSocket error: $error';
-            });
-          }
+          if (!completer.isCompleted) completer.completeError(error);
         },
         onDisconnect: () {
-          _reconnectTimer?.cancel();
-          _reconnectTimer = Timer.periodic(retryInterval, (timer) {
-            if (!mounted) {
-              timer.cancel();
-              return;
-            }
-            retryCount++;
-            if (_stompClient != null && _stompClient.connected) {
-              timer.cancel();
-            } else if (retryCount <= maxRetries) {
-              _stompClient?.activate();
-            } else {
-              timer.cancel();
-              if (mounted) {
-                Navigator.pushReplacementNamed(
-                  context,
-                  ChoiceScreen.routeName,
-                );
-              }
-            }
-          });
+          // Opcjonalnie można obsłużyć disconnect, ale tutaj czekamy tylko na connect/error
         },
       );
+
+      // Czekamy max 15s na połączenie
+      await completer.future.timeout(const Duration(seconds: 15));
+
+      if (mounted) {
+        _navigatedAway = true; // Zaznacz sukces
+        Navigator.pushReplacementNamed(
+          context,
+          PokerTablesScreen.routeName,
+        );
+      }
+
     } on ConflictException catch (e) {
       // HTTP 409 - gracz jest już w grze
       print('Otrzymano ConflictException: $e');
-      setState(() => _joining = false);
-
-      // Pokaż dialog reconnect
-      await _showReconnectDialog(nick);
+      if (mounted) {
+        setState(() => _joining = false);
+        // Pokaż dialog reconnect
+        await _showReconnectDialog(nick);
+      }
 
     } catch (e) {
-      setState(() {
-        _errorMsg = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          _errorMsg = e.toString();
+        });
+      }
     } finally {
       if (mounted) setState(() => _joining = false);
     }
