@@ -122,15 +122,13 @@ class PokerRepository {
           // Use dynamic first to avoid cast exception if the format is unexpected
           final dynamic decoded = jsonDecode(frame.body!);
 
-          if (decoded is Map<String, dynamic>) {
-             controller.add(fromJson(decoded));
+          if (decoded is Map) {
+             // Safely cast to Map<String, dynamic> to ensure downstream compatibility
+             // This handles cases where jsonDecode returns Map<dynamic, dynamic> or similar
+             final safeMap = Map<String, dynamic>.from(decoded);
+             controller.add(fromJson(safeMap));
           } else {
-             print('WS Error: Expected Map<String, dynamic> but got ${decoded.runtimeType}');
-             // Attempt unsafe cast if necessary or handle other types if required
-             // But for now, just print error instead of swallowing it silently.
-             // If fromJson can handle it, maybe we can try:
-             // controller.add(fromJson(decoded as Map<String, dynamic>));
-             // But that would throw.
+             print('WS Error: Expected Map but got ${decoded.runtimeType} on $topic');
           }
         } catch (e, stack) {
           print('WS Parsing Error on $topic: $e');

@@ -1615,8 +1615,10 @@ class GameCubit extends Cubit<GameState> {
     int? myChips;
 
     raw.forEach((email, data) {
-      if (data is Map<String, dynamic>) {
-        final dto = PlayerDto.fromMap(data);
+      // Relax type check to 'is Map' and cast safely
+      if (data is Map) {
+        final safeData = Map<String, dynamic>.from(data);
+        final dto = PlayerDto.fromMap(safeData);
         allPlayers.add(dto);
         if (email == me) {
           myChips = dto.chips;
