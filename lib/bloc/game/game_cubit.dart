@@ -282,7 +282,7 @@ class GameCubit extends Cubit<GameState> {
     print('Subskrybuję tematy: /topic/table/$tableCode i /topic/user/$userEmail');
 
     // Subskrypcja na topic stołu - używamy metody _setupTableSubscription
-    _setupTableSubscription(tableCode);
+    _setupTableSubscription(tableCode, userEmail); // POPRAWIONO: przekazano userEmail (jako me)
 
     // Subskrypcja na topic użytkownika - IDENTYCZNA jak w metodzie init
     if (userEmail.isNotEmpty) {
@@ -459,6 +459,7 @@ class GameCubit extends Cubit<GameState> {
 
                 updateState(
                   pot: s.pot,
+                  updateNumber: s.updateNumber, // NOWE - przekaż updateNumber
                   recalculateMyTurn: false,
                 );
 
@@ -476,6 +477,7 @@ class GameCubit extends Cubit<GameState> {
                   pot: s.pot,
                   nextPlayerMail: s.nextPlayerMail,
                   nextPlayerToCall: s.nextPlayerToCall,
+                  updateNumber: s.updateNumber, // NOWE - przekaż updateNumber
                   recalculateMyTurn: true,
                 );
 
@@ -690,7 +692,7 @@ class GameCubit extends Cubit<GameState> {
   }
 
   // Ta metoda jest teraz wywoływana przez _subscribeTopics
-  void _setupTableSubscription(int tableCode) {
+  void _setupTableSubscription(int tableCode, String me) { // POPRAWIONO: Dodano parametr me (userEmail)
      _tableSub = _repo.subscribeTopic<dynamic>(
       '/topic/table/$tableCode',
           (json) => json,
@@ -877,6 +879,7 @@ class GameCubit extends Cubit<GameState> {
                 updateState(
                   pot: s.pot,
                   recalculateMyTurn: false, // NIE aktualizujemy isMyTurn podczas blokady
+                  updateNumber: s.updateNumber, // NOWE - przekaż updateNumber
                 );
               }
 
@@ -896,6 +899,7 @@ class GameCubit extends Cubit<GameState> {
                 nextPlayerMail: s.nextPlayerMail ?? state.nextPlayerMail,
                 nextPlayerToCall: s.nextPlayerToCall ?? state.nextPlayerToCall,
                 recalculateMyTurn: true, // WAŻNE - przeliczymy isMyTurn bo nextPlayerMail się zmieniło
+                updateNumber: s.updateNumber, // NOWE - przekaż updateNumber
               );
 
               if (s.actionPlayerMail != null) {
@@ -928,86 +932,6 @@ class GameCubit extends Cubit<GameState> {
     });
   }
 
-  // NOWE - ELIMINATION HANDLING METHODS
-
-  void _handleEliminatedPlayers(List<String> eliminatedEmails) {
-    print('=== OBSŁUGA ELIMINATED PLAYERS ===');
-    print('Wyeliminowani gracze: $eliminatedEmails');
-
-    // Zapisz jako pending - zostaną zaktualizowani w _startNewRound()
-    _pendingEliminatedEmails = List<String>.from(eliminatedEmails);
-    print('Zapisano eliminated_players jako pending: $_pendingEliminatedEmails');
-    print('Gracze poczekają na aktualizację w nowej rundzie');
-  }
-
-  void _handleGameFinished(String? ultimateWinner) {
-    print('=== OBSŁUGA GAME FINISHED ===');
-    print('Ultimate winner: $ultimateWinner');
-
-    // NATYCHMIAST aktualizuj stan - gra zakończona
-    updateState(
-      gameFinished: true,
-      ultimateWinner: ultimateWinner,
-      recalculateMyTurn: false,
-    );
-
-    print('Gra zakończona - ultimate winner będzie pokazany w overlay');
-  }
-
-  // NOWE - SHOWDOWN SEQUENCE METHODS
-
-  void _startShowdownSequence() {
-    print('=== ROZPOCZĘTO SEKWENCJĘ SHOWDOWN ===');
-
-    // Anuluj poprzednie timery jeśli istnieją
-    _showdownSequenceTimer?.cancel();
-
-    // 3 sekundy oczekiwania na "cards_to_show", "winner", "winner_allin", "showdown_cards", "eliminated_players", "game_finished"
-    _showdownSequenceTimer = Timer(const Duration(seconds: 3), () {
-      print('Upłynęły 3 sekundy od SHOWDOWN - sprawdzam karty do pokazania');
-
-      if (_pendingRevealedCards.isNotEmpty) {
-        // Mamy karty do pokazania - usuń karty lokalnego gracza jeśli są
-        final filteredCards = <String, List<String>>{};
-        _pendingRevealedCards.forEach((email, cards) {
-          if (email != state.localEmail) {
-            filteredCards[email] = cards;
-          } else {
-            print('Pomijam karty lokalnego gracza: $email');
-          }
-        });
-
-        if (filteredCards.isNotEmpty) {
-          print('Pokazuję karty graczy: $filteredCards');
-          _showRevealedCards(filteredCards);
-        } else {
-          print('Brak kart do pokazania (wszystkie odfiltrowane jako lokalne)');
-          // NOWE - Sprawdź zwycięzców nawet gdy karty zostały odfiltrowane
-          _checkPendingWinners();
-        }
-      } else {
-        print('Brak kart do pokazania - pusta mapa _pendingRevealedCards');
-        // NOWE - Sprawdź zwycięzców gdy brak kart do pokazania
-        _checkPendingWinners();
-      }
-
-      _pendingRevealedCards.clear();
-    });
-  }
-
-  void _handleCardsToShow(Map<String, List<String>> cardsMap) {
-    print('_handleCardsToShow: $cardsMap');
-    _pendingRevealedCards = cardsMap;
-  }
-
-  void _handleShowdownCards(List<String> showdownCards) {
-    print('=== OBSŁUGA SHOWDOWN_CARDS ===');
-    print('Otrzymane dodatkowe karty wspólne: $showdownCards');
-
-    // NAPRAWIONE - Zapisujemy karty jako pending zamiast od razu je dodawać
-    _pendingShowdownCards = List<String>.from(showdownCards); // Kopia listy
-    print('Zapisano showdown_cards jako pending: $_pendingShowdownCards');
-  }
   // NOWA METODA - Pokazanie opóźnionych kart wspólnych po 3 sekundach
   void _showPendingCommunityCards() {
     if (_pendingCommunityCards.isEmpty) {
@@ -1050,6 +974,7 @@ class GameCubit extends Cubit<GameState> {
         nextPlayerMail: _pendingStateDTO!.nextPlayerMail,
         nextPlayerToCall: _pendingStateDTO!.nextPlayerToCall,
         recalculateMyTurn: true, // WAŻNE - przelicz isMyTurn z nowymi wartościami
+        updateNumber: _pendingStateDTO!.updateNumber, // NOWE - przekaż zbuforowany updateNumber
       );
 
       // Wyczyść pending StateDTO
