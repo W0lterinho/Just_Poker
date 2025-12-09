@@ -715,7 +715,11 @@ class GameCubit extends Cubit<GameState> {
           }
 
           // 4. Obsługa pełnej mapy graczy!
-          if (payload.values.isNotEmpty && payload.values.first is Map<String, dynamic> && (payload.values.first as Map<String, dynamic>).containsKey('seatIndex')) {
+          // Relaksujemy typowanie do 'is Map', ponieważ jsonDecode może zwracać _InternalLinkedHashMap<String, dynamic>
+          // co nie zawsze przechodzi check `is Map<String, dynamic>` w niektórych wersjach Darta/kontekstach.
+          if (payload.values.isNotEmpty &&
+              payload.values.first is Map &&
+              (payload.values.first as Map).containsKey('seatIndex')) {
             print('PRZED _handlePlayersMap, payload: $payload');
             _handlePlayersMap(payload, userEmail);
             print('PO _handlePlayersMap');
