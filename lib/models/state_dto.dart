@@ -6,6 +6,7 @@ class StateDTO {
   final int? pot;
   final int? nextPlayerToCall; // NOWE - kwota którą trzeba wpłacić żeby grać dalej
   final String? nextPlayerMail;
+  final int? updateNumber; // NOWE - dla gap detection
 
   StateDTO({
     this.actionPlayerMail,
@@ -15,6 +16,7 @@ class StateDTO {
     this.pot,
     this.nextPlayerToCall,
     this.nextPlayerMail,
+    this.updateNumber,
   });
 
   factory StateDTO.fromJson(Map<String, dynamic> json) => StateDTO(
@@ -25,6 +27,7 @@ class StateDTO {
     pot: json['pot'] as int?,
     nextPlayerToCall: json['nextPlayerToCall'] as int?,
     nextPlayerMail: json['nextPlayerMail'] as String?,
+    updateNumber: json['updateNumber'] as int?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -35,5 +38,6 @@ class StateDTO {
     'pot': pot,
     'nextPlayerToCall': nextPlayerToCall,
     'nextPlayerMail': nextPlayerMail,
+    'updateNumber': updateNumber,
   };
 }

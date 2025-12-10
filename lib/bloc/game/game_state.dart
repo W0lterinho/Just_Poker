@@ -41,6 +41,9 @@ class GameState extends Equatable {
   final bool actionTimerUrgent; // true gdy ≤10 sekund (czerwony, większy)
   final bool actionTimerGracePeriod; // true w ostatnich 5 sekundach (bez wyświetlania)
   final int? updateNumber; // Numer ostatniej wiadomości z backendu (dla przyszłych iteracji)
+  // NOWE - RECONNECT I GAP DETECTION
+  final bool isReconnecting; // Czy trwa próba ponownego łączenia
+  final int lastUpdateNumber; // Ostatni poprawny numer wiadomości (dla detekcji luki)
 
   const GameState({
     this.gameStarted = false,
@@ -75,6 +78,8 @@ class GameState extends Equatable {
     this.actionTimerUrgent = false,
     this.actionTimerGracePeriod = false,
     this.updateNumber,
+    this.isReconnecting = false,
+    this.lastUpdateNumber = 0,
   });
 
   GameState copyWith({
@@ -110,6 +115,8 @@ class GameState extends Equatable {
     bool? actionTimerUrgent,
     bool? actionTimerGracePeriod,
     int? updateNumber,
+    bool? isReconnecting,
+    int? lastUpdateNumber,
   }) {
     return GameState(
       gameStarted: gameStarted ?? this.gameStarted,
@@ -144,6 +151,8 @@ class GameState extends Equatable {
       actionTimerUrgent: actionTimerUrgent ?? this.actionTimerUrgent,
       actionTimerGracePeriod: actionTimerGracePeriod ?? this.actionTimerGracePeriod,
       updateNumber: updateNumber ?? this.updateNumber,
+      isReconnecting: isReconnecting ?? this.isReconnecting,
+      lastUpdateNumber: lastUpdateNumber ?? this.lastUpdateNumber,
     );
   }
 
@@ -154,6 +163,7 @@ class GameState extends Equatable {
     showingRaiseSlider, raiseAmount, nextPlayerToCall, communityCards,
     revealedCards, showingRevealedCards, winners, winnerWinSizes, showingWinners,
     eliminatedEmails, gameFinished, ultimateWinner, actionTimerSeconds,
-    actionTimerUrgent, actionTimerGracePeriod, updateNumber
+    actionTimerUrgent, actionTimerGracePeriod, updateNumber,
+    isReconnecting, lastUpdateNumber
   ];
 }
