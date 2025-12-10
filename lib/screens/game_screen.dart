@@ -35,8 +35,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // Rejestracja obserwera cyklu życia
-
+    WidgetsBinding.instance.addObserver(this);
     // Sprawdź czy to reconnect czy normalny flow
     if (widget.syncDto != null) {
       // RECONNECT FLOW - inicjalizacja z SyncDTO
@@ -55,6 +54,20 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           context.read<GameCubit>().sendPlayersRequest();
         }
       });
+    }
+  }
+  @override
+  void dispose() {
+    // 3. Usunięcie observera
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('GameScreen: App resumed from background');
+      // Wywołaj metodę synchronizacji w Cubicie
+      context.read<GameCubit>().onAppResumed();
     }
   }
 
@@ -121,28 +134,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // Wyrejestrowanie obserwera
-    super.dispose();
-  }
-
-  // Obsługa zmian cyklu życia aplikacji (minimalizacja/powrót)
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      print('GameScreen: App resumed - wywołuję onAppResumed w Cubicie');
-      context.read<GameCubit>().onAppResumed();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final storage = context.read<FlutterSecureStorage>();
     return Scaffold(
       body: BlocBuilder<GameCubit, GameState>(
         builder: (ctx, state) {
-          print('GameScreen: state.cardsVisible=${state.cardsVisible}, state.gameStarted=${state.gameStarted}, state.isMyTurn=${state.isMyTurn}, state.showingRevealedCards=${state.showingRevealedCards}, state.showingWinners=${state.showingWinners}, state.gameFinished=${state.gameFinished}, state.ultimateWinner=${state.ultimateWinner}, isReconnecting=${state.isReconnecting}');
+          print('GameScreen: state.cardsVisible=${state.cardsVisible}, state.gameStarted=${state.gameStarted}, state.isMyTurn=${state.isMyTurn}, state.showingRevealedCards=${state.showingRevealedCards}, state.showingWinners=${state.showingWinners}, state.gameFinished=${state.gameFinished}, state.ultimateWinner=${state.ultimateWinner}');
 
           return Stack(
             fit: StackFit.expand,
@@ -240,41 +237,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 UltimateWinnerOverlay(
                   ultimateWinner: state.ultimateWinner!,
                   onBackToLobby: _handleBackToLobby,
-                ),
-
-              // RECONNECT OVERLAY (najwyższa warstwa - blokuje wszystko)
-              if (state.isReconnecting)
-                Container(
-                  color: Colors.black.withOpacity(0.7),
-                  child: const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(
-                          color: Color(0xFFC0A465), // Złoty kolor
-                        ),
-                        SizedBox(height: 20),
-                        Text(
-                          'Reconnecting...',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        Text(
-                          'Please wait while we restore your connection',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
             ],
           );

@@ -16,6 +16,9 @@ class PokerRepository {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   StompClient? _stompClient;
   StompUnsubscribe? _userTopicUnsubscribe;
+  final _connectionStatusController = StreamController<bool>.broadcast();
+  Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
+  bool get isConnected => _stompClient?.connected ?? false;
 
   Future<void> joinPoker({ required String nickName }) async {
     final token = await _storage.read(key: 'accessToken');
@@ -39,33 +42,38 @@ class PokerRepository {
     }
   }
 
-  StompClient createStompClient({
-    required void Function(StompFrame) onConnect,
-    required void Function(dynamic) onError,
-    required void Function() onDisconnect,
-  }) {
-    // Upewnij się, że stary klient jest zamknięty przed utworzeniem nowego
-    _stompClient?.deactivate();
-    _stompClient = null;
+  StompClient createStompClient() {
+    _stompClient?.deactivate(); // Czyścimy starego klienta
 
     final client = StompClient(
       config: StompConfig(
         url: _wsUrl,
-        onConnect: onConnect,
-        onWebSocketError: onError,
-        onStompError: (f) => onError(f.body),
-        onDisconnect: (_) => onDisconnect(),
-        // Wyłączamy automatyczny reconnect biblioteki (reconnectDelay: 0),
-        // ponieważ chcemy kontrolować logikę 25 prób * 5s ręcznie w Cubicie
-        // i zapewnić pełne czyszczenie ("Zombie Sockets").
-        reconnectDelay: const Duration(seconds: 0),
-        // Heartbeat co 10s (incoming & outgoing) zgodnie z wymaganiami
-        heartbeatIncoming: const Duration(seconds: 10),
-        heartbeatOutgoing: const Duration(seconds: 10),
+        onConnect: (frame) {
+          print('PokerRepo: Connected');
+          _connectionStatusController.add(true);
+        },
+        onWebSocketError: (err) {
+          print('PokerRepo: WS Error: $err');
+          _connectionStatusController.add(false);
+        },
+        onStompError: (f) {
+          // Logowanie błędów STOMP
+          print('PokerRepo: Stomp Error: ${f.body}');
+        },
+        onDisconnect: (frame) {
+          print('PokerRepo: Disconnected');
+          _connectionStatusController.add(false);
+        },
+        reconnectDelay: const Duration(seconds: 5),
+        connectionTimeout: const Duration(seconds: 5),
       ),
     )..activate();
+
     _stompClient = client;
     return client;
+  }
+  void dispose() {
+    _connectionStatusController.close();
   }
 
   /// Wysyła payload.toJson() na [destination], czeka na pierwszą
@@ -119,21 +127,9 @@ class PokerRepository {
       callback: (frame) {
         print('WS INCOMING on $topic: ${frame.body}'); // do wyświetlania logów
         try {
-          // Use dynamic first to avoid cast exception if the format is unexpected
-          final dynamic decoded = jsonDecode(frame.body!);
-
-          if (decoded is Map) {
-             // Safely cast to Map<String, dynamic> to ensure downstream compatibility
-             // This handles cases where jsonDecode returns Map<dynamic, dynamic> or similar
-             final safeMap = Map<String, dynamic>.from(decoded);
-             controller.add(fromJson(safeMap));
-          } else {
-             print('WS Error: Expected Map but got ${decoded.runtimeType} on $topic');
-          }
-        } catch (e, stack) {
-          print('WS Parsing Error on $topic: $e');
-          print(stack);
-        }
+          final json = jsonDecode(frame.body!) as Map<String, dynamic>;
+          controller.add(fromJson(json));
+        } catch (_) {}
       },
     );
     if (topic.startsWith('/topic/user/')) {
