@@ -29,13 +29,13 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _requestedPlayers = false;
 
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     // Sprawdź czy to reconnect czy normalny flow
     if (widget.syncDto != null) {
       // RECONNECT FLOW - inicjalizacja z SyncDTO
@@ -54,6 +54,20 @@ class _GameScreenState extends State<GameScreen> {
           context.read<GameCubit>().sendPlayersRequest();
         }
       });
+    }
+  }
+  @override
+  void dispose() {
+    // 3. Usunięcie observera
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      print('GameScreen: App resumed from background');
+      // Wywołaj metodę synchronizacji w Cubicie
+      context.read<GameCubit>().onAppResumed();
     }
   }
 

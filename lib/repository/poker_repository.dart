@@ -16,6 +16,9 @@ class PokerRepository {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   StompClient? _stompClient;
   StompUnsubscribe? _userTopicUnsubscribe;
+  final _connectionStatusController = StreamController<bool>.broadcast();
+  Stream<bool> get connectionStatusStream => _connectionStatusController.stream;
+  bool get isConnected => _stompClient?.connected ?? false;
 
   Future<void> joinPoker({ required String nickName }) async {
     final token = await _storage.read(key: 'accessToken');
@@ -39,23 +42,38 @@ class PokerRepository {
     }
   }
 
-  StompClient createStompClient({
-    required void Function(StompFrame) onConnect,
-    required void Function(dynamic) onError,
-    required void Function() onDisconnect,
-  }) {
+  StompClient createStompClient() {
+    _stompClient?.deactivate(); // Czyścimy starego klienta
+
     final client = StompClient(
       config: StompConfig(
         url: _wsUrl,
-        onConnect: onConnect,
-        onWebSocketError: onError,
-        onStompError: (f) => onError(f.body),
-        onDisconnect: (_) => onDisconnect(),
+        onConnect: (frame) {
+          print('PokerRepo: Connected');
+          _connectionStatusController.add(true);
+        },
+        onWebSocketError: (err) {
+          print('PokerRepo: WS Error: $err');
+          _connectionStatusController.add(false);
+        },
+        onStompError: (f) {
+          // Logowanie błędów STOMP
+          print('PokerRepo: Stomp Error: ${f.body}');
+        },
+        onDisconnect: (frame) {
+          print('PokerRepo: Disconnected');
+          _connectionStatusController.add(false);
+        },
         reconnectDelay: const Duration(seconds: 5),
+        connectionTimeout: const Duration(seconds: 5),
       ),
     )..activate();
+
     _stompClient = client;
     return client;
+  }
+  void dispose() {
+    _connectionStatusController.close();
   }
 
   /// Wysyła payload.toJson() na [destination], czeka na pierwszą

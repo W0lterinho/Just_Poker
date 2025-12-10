@@ -100,58 +100,23 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
       _joining = true;
       _errorMsg = null;
     });
-
     final repo = Provider.of<PokerRepository>(context, listen: false);
 
     try {
-      // 1. Wykonaj fresh join (reset gracza na serwerze)
       await repo.freshJoin(nickName: nickName);
 
-      print('Fresh join successful - nawiązuję WebSocket connection');
+      repo.createStompClient();
 
-      // 2. Nawiąż połączenie WebSocket (identycznie jak w normalnym flow)
-      int retryCount = 0;
-      const retryInterval = Duration(seconds: 5);
-      const maxRetries = 12; // 12*5s = 60s
-
-      _stompClient = repo.createStompClient(
-        onConnect: (frame) {
-          print('WebSocket połączony - nawiguję do PokerTablesScreen');
-          Navigator.pushReplacementNamed(
-            context,
-            PokerTablesScreen.routeName,
-          );
-        },
-        onError: (error) {
-          print('WebSocket error: $error');
-          setState(() {
-            _errorMsg = 'WebSocket error: $error';
-          });
-        },
-        onDisconnect: () {
-          print('WebSocket disconnected - retry logic');
-          Timer.periodic(retryInterval, (timer) {
-            retryCount++;
-            if (_stompClient.connected) {
-              timer.cancel();
-            } else if (retryCount <= maxRetries) {
-              _stompClient.activate();
-            } else {
-              timer.cancel();
-              Navigator.pushReplacementNamed(
-                context,
-                ChoiceScreen.routeName,
-              );
-            }
-          });
-        },
+      await repo.connectionStatusStream.firstWhere((isConnected) => isConnected).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Connection timeout'),
       );
 
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, PokerTablesScreen.routeName);
+      }
     } catch (e) {
-      print('Błąd podczas fresh join: $e');
-      setState(() {
-        _errorMsg = 'Fresh join failed: $e';
-      });
+      if (mounted) setState(() => _errorMsg = 'Fresh join failed: $e');
     } finally {
       if (mounted) setState(() => _joining = false);
     }
@@ -167,39 +132,23 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
     final storage = const FlutterSecureStorage();
 
     try {
-      print('=== ROZPOCZYNAM RECONNECT ===');
+      print('=== ROZPOCZYNAM RECONNECT (YES) ===');
 
-      // 1. Nawiąż połączenie WebSocket
-      print('1. Nawiązuję połączenie WebSocket...');
+      // 1. Tworzymy klienta (BEZ CALLBACKÓW - repozytorium zarządza stanem)
+      repo.createStompClient();
 
-      final completer = Completer<void>();
-
-      _stompClient = repo.createStompClient(
-        onConnect: (frame) {
-          print('2. WebSocket połączony pomyślnie');
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        onError: (error) {
-          print('Błąd WebSocket: $error');
-          if (!completer.isCompleted) {
-            completer.completeError('WebSocket connection failed: $error');
-          }
-        },
-        onDisconnect: () {
-          print('WebSocket rozłączony');
-        },
+      // 2. Czekamy na sygnał ze strumienia, że połączono (timeout 15s)
+      print('1. Czekam na połączenie WebSocket...');
+      await repo.connectionStatusStream
+          .firstWhere((isConnected) => isConnected)
+          .timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('WebSocket connection timeout'),
       );
 
-      // Czekaj na połączenie (max 10 sekund)
-      await completer.future.timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('WebSocket connection timeout');
-        },
-      );
+      print('2. WebSocket połączony pomyślnie');
 
+      // 3. Reszta logiki pozostaje bez zmian (pobranie kodu i sync)
       print('3. Pobieram tableCode z SecureStorage...');
       final tableCodeStr = await storage.read(key: 'tableCode');
       final tableCode = int.tryParse(tableCodeStr ?? '');
@@ -211,12 +160,10 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
       print('4. tableCode: $tableCode');
       print('5. Wysyłam request sync...');
 
-      // 2. Wyślij sync request
+      // 4. Wyślij sync request i pobierz aktualny stan gry
       final syncDto = await repo.sendSync();
 
       print('6. Otrzymano SyncDTO: gameStarted=${syncDto.gameStarted}, players=${syncDto.players.length}');
-
-      // 3. Nawiguj do GameScreen z syncDto
       print('7. Nawiguję do GameScreen z syncDto...');
 
       if (mounted) {
@@ -231,7 +178,7 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
               child: GameScreen(
                 tableCode: tableCode,
                 isCreator: false,
-                syncDto: syncDto,
+                syncDto: syncDto, // Przekazujemy SyncDTO do inicjalizacji
               ),
             ),
           ),
@@ -242,9 +189,11 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
 
     } catch (e) {
       print('Błąd podczas reconnect: $e');
-      setState(() {
-        _errorMsg = 'Reconnect failed: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMsg = 'Reconnect failed: $e';
+        });
+      }
     } finally {
       if (mounted) setState(() => _reconnecting = false);
     }
@@ -255,7 +204,7 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
     if (nick.isEmpty) return;
 
     setState(() {
-      _joining  = true;
+      _joining = true;
       _errorMsg = null;
     });
 
@@ -264,52 +213,24 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
     try {
       await repo.joinPoker(nickName: nick);
 
-      // Join succeeded - normal flow
-      int retryCount = 0;
-      const retryInterval = Duration(seconds: 5);
-      const maxRetries = 12; // 12*5s = 60s
+      // 1. Tworzymy klienta
+      repo.createStompClient();
 
-      _stompClient = repo.createStompClient(
-        onConnect: (frame) {
-          Navigator.pushReplacementNamed(
-            context,
-            PokerTablesScreen.routeName,
-          );
-        },
-        onError: (error) {
-          setState(() {
-            _errorMsg = 'WebSocket error: $error';
-          });
-        },
-        onDisconnect: () {
-          Timer.periodic(retryInterval, (timer) {
-            retryCount++;
-            if (_stompClient.connected) {
-              timer.cancel();
-            } else if (retryCount <= maxRetries) {
-              _stompClient.activate();
-            } else {
-              timer.cancel();
-              Navigator.pushReplacementNamed(
-                context,
-                ChoiceScreen.routeName,
-              );
-            }
-          });
-        },
+      // 2. Czekamy na połączenie (timeout 15s)
+      await repo.connectionStatusStream.firstWhere((isConnected) => isConnected).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Connection timeout'),
       );
+
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, PokerTablesScreen.routeName);
+      }
+
     } on ConflictException catch (e) {
-      // HTTP 409 - gracz jest już w grze
-      print('Otrzymano ConflictException: $e');
       setState(() => _joining = false);
-
-      // Pokaż dialog reconnect
       await _showReconnectDialog(nick);
-
     } catch (e) {
-      setState(() {
-        _errorMsg = e.toString();
-      });
+      if (mounted) setState(() => _errorMsg = e.toString());
     } finally {
       if (mounted) setState(() => _joining = false);
     }

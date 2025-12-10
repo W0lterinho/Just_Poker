@@ -21,37 +21,32 @@ class GameCubit extends Cubit<GameState> {
   List<String> _pendingCards = []; // Karty które czekają na wyświetlenie
   bool _newRoundInProgress = false; // NOWE - flaga czy nowa runda się rozpoczęła
 
-  // NOWE - Timery do usuwania akcji po 4 sekundach
   final Map<String, Timer> _actionTimers = {};
-  // NOWE - Opóźnianie pokazywania kart wspólnych (3s przerwa)
   List<String> _pendingCommunityCards = [];
   Timer? _communityCardsTimer;
   bool _delayingCommunityCards = false;
-  // NOWE - Buforowanie StateDTO podczas opóźnienia kart
   StateDTO? _pendingStateDTO;
-
-  // NOWE - SHOWDOWN Timery
   Timer? _showdownSequenceTimer;
   Timer? _revealedCardsTimer;
   Timer? _winnersTimer;
   Timer? _allInWinnerTimer; // NOWE - timer dla sekwencji ALL IN
 
-  // NOWE - SHOWDOWN pending dane
   Map<String, List<String>> _pendingRevealedCards = {}; // Karty czekające na pokazanie
   List<WinnerDTO> _pendingWinners = []; // ZMIENIONE - teraz WinnerDTO zamiast String
   bool _isAllInWinners = false; // NOWE - czy to winner_allin
   int _currentAllInWinnerIndex = 0; // NOWE - aktualny index dla sekwencji ALL IN
   List<String> _pendingShowdownCards = []; // Brakujące karty wspólne
-  // NOWE - ELIMINATION pending dane
   List<String> _pendingEliminatedEmails = []; // Wyeliminowani gracze czekający na aktualizację
   Timer? _actionTimer;
   bool _shouldStartActionTimer = false;
   bool _shouldStopActionTimer = false;
+  StreamSubscription? _connectionStatusSub;
 
   GameCubit(this._repo, this._storage) : super(const GameState());
 
   @override
   Future<void> close() {
+    _connectionStatusSub?.cancel();
     _tableSub?.cancel();
     _userSub?.cancel();
     _audioPlayer.dispose();
@@ -222,6 +217,47 @@ class GameCubit extends Cubit<GameState> {
       _stopActionTimer();
     }
   }
+
+  void _listenToConnectionStatus() {
+    // Anuluj poprzednią subskrypcję jeśli istnieje
+    _connectionStatusSub?.cancel();
+
+    _connectionStatusSub = _repo.connectionStatusStream.listen((isConnected) {
+      if (isConnected) {
+        print('GameCubit: Wykryto ponowne połączenie WebSocket (RECONNECT)');
+        _handleReconnection();
+      } else {
+        print('GameCubit: Utracono połączenie WebSocket');
+        // Opcjonalnie: można tu ustawić flagę w UI np. "Connecting..."
+      }
+    });
+  }
+  Future<void> _handleReconnection() async {
+    // Jeśli nie mamy kodu stołu lub maila, nie mamy do czego wracać
+    if (_tableCode == null || state.localEmail == null) return;
+
+    print('GameCubit: Rozpoczynam procedurę Reconnect (Step 2)');
+
+    // 1. Wyczyść stare subskrypcje (one i tak są martwe po zerwaniu socketa)
+    await _tableSub?.cancel();
+    await _userSub?.cancel();
+
+    // 2. Zasubskrybuj tematy na nowo (nowa sesja STOMP wymaga nowych subskrypcji)
+    _subscribeTopics(_tableCode!, state.localEmail!);
+
+    // 3. Wyślij Sync Request
+    try {
+      print('GameCubit: Wysyłam request o Sync po reconnectcie');
+      final syncDto = await _repo.sendSync();
+
+      // 4. Zaaplikuj stan (Step 1 logic reuse)
+      print('GameCubit: Otrzymano SyncDTO, aktualizuję stan');
+      _applySync(syncDto, state.localEmail!);
+    } catch (e) {
+      print('GameCubit: Błąd podczas synchronizacji po reconnectcie: $e');
+    }
+  }
+
   /// Inicjalizacja gry z SyncDTO (po reconnect)
   Future<void> initFromSync(SyncDTO syncDto) async {
     final me = await _storage.read(key: 'userEmail') ?? '';
@@ -246,6 +282,7 @@ class GameCubit extends Cubit<GameState> {
 
     // 1. Subskrybuj tematy
     _subscribeTopics(tableCode, me);
+    _listenToConnectionStatus();
 
     // 2. Aplikuj SyncDTO na stan
     _applySync(syncDto, me);
@@ -265,6 +302,7 @@ class GameCubit extends Cubit<GameState> {
       print('WS [table/$tableCode] payload: $payload');
 
       if (payload is Map<String, dynamic>) {
+        _verifyUpdateNumber(payload);
         // Nowa obsługa gameStarted: TRUE
         if (payload['gameStarted'] == true) {
           final wasGameStarted = state.gameStarted;
@@ -477,6 +515,7 @@ class GameCubit extends Cubit<GameState> {
       ).listen((payload) {
         print('WS [user/$userEmail] payload: $payload | type: ${payload.runtimeType}');
         if (payload is Map<String, dynamic>) {
+          _verifyUpdateNumber(payload);
           // Obsługa kart gracza
           if (payload['type'] == 'cards') {
             final cards = List<String>.from(payload['object'] ?? []);
@@ -757,6 +796,7 @@ class GameCubit extends Cubit<GameState> {
     _tableCode = tableCode;
     final me = await _storage.read(key: 'userEmail') ?? '';
 
+    _listenToConnectionStatus();
     // 1) SUB na /topic/table/...
     _tableSub = _repo.subscribeTopic<dynamic>(
       '/topic/table/$tableCode',
@@ -2400,5 +2440,42 @@ class GameCubit extends Cubit<GameState> {
     await performFoldAction();
 
     print('Auto-FOLD wykonany pomyślnie');
+  }
+
+  Future<void> onAppResumed() async {
+    // HAMULEC: Jeśli brak socketa, nie rób nic (zadziała auto-reconnect)
+    if (!_repo.isConnected) {
+      print('Skipping manual sync - socket disconnected');
+      return;
+    }
+
+    try {
+      final email = await _storage.read(key: 'userEmail');
+      if (email != null && _tableCode != null) {
+        final syncDto = await _repo.sendSync();
+        _applySync(syncDto, email);
+      }
+    } catch (e) {
+      print('Sync on resume error: $e');
+    }
+  }
+
+  void _verifyUpdateNumber(Map<String, dynamic> payload) {
+    if (!payload.containsKey('updateNumber')) return;
+
+    final remoteUpdateNum = payload['updateNumber'] as int?;
+    if (remoteUpdateNum == null) return;
+
+    final localUpdateNum = state.updateNumber ?? 0; // Jeśli null to 0
+
+    print('UPDATE NUMBER CHECK: Local=$localUpdateNum, Remote=$remoteUpdateNum');
+    // Scenariusz: remote powinno być dokładnie local + 1
+    // Jeśli remote > local + 1 -> zgubiliśmy wiadomość -> SYNC
+    if (remoteUpdateNum > localUpdateNum + 1) {
+      print('WYKRYTO LUKĘ W KOMUNIKACJI (Gap detected)! Wymuszam Sync.');
+      // Wywołujemy sync asynchronicznie, żeby nie blokować przetwarzania obecnej wiadomości (chyba że chcemy odrzucić obecną)
+      // W tym przypadku po prostu naprawiamy stan w tle.
+      onAppResumed(); // Reuse logiki sync
+    }
   }
 }
