@@ -2392,7 +2392,7 @@ class GameCubit extends Cubit<GameState> {
         );
       } else if (remainingSeconds >= -4) {
         // Grace period: 0, -1, -2, -3, -4 (5 sekund)
-        print('Grace period: ${remainingSeconds} (pozostało ${-remainingSeconds + 5} sekund do auto-FOLD)');
+        print('Grace period: $remainingSeconds (pozostało ${-remainingSeconds + 5} sekund do auto-FOLD)');
         updateState(
           actionTimerSeconds: null, // Ukryj timer
           actionTimerUrgent: false,

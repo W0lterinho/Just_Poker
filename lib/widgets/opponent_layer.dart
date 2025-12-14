@@ -34,7 +34,7 @@ class OpponentLayer extends StatelessWidget {
   ];
 
   const OpponentLayer({
-    Key? key,
+    super.key,
     required this.opponents,
     this.activeEmail,
     this.dealerMail,
@@ -50,7 +50,7 @@ class OpponentLayer extends StatelessWidget {
     this.showingWinners = false,
     // NOWE - ELIMINATION parametry z domyślnymi wartościami
     this.eliminatedEmails = const [],
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

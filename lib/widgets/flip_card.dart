@@ -7,11 +7,11 @@ class FlipCard extends StatelessWidget {
   final bool showFront;
 
   const FlipCard({
-    Key? key,
+    super.key,
     required this.front,
     required this.back,
     this.showFront = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

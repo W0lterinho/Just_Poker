@@ -5,10 +5,10 @@ class ActionTimerWidget extends StatefulWidget {
   final bool isUrgent;
 
   const ActionTimerWidget({
-    Key? key,
+    super.key,
     required this.seconds,
     required this.isUrgent,
-  }) : super(key: key);
+  });
 
   @override
   State<ActionTimerWidget> createState() => _ActionTimerWidgetState();

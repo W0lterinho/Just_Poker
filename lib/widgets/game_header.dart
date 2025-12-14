@@ -6,11 +6,11 @@ class GameHeader extends StatelessWidget {
   final bool       showCode;
 
   const GameHeader({
-    Key? key,
+    super.key,
     required this.tableCode,
     required this.onBack,
     this.showCode = true,          // nowość
-  }) : super(key: key);
+  });
 
 @override
   Widget build(BuildContext context) {

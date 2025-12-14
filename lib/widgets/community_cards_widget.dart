@@ -7,11 +7,11 @@ class CommunityCardsWidget extends StatelessWidget {
   final int playerCount; // NOWE - liczba graczy dla skalowania
 
   const CommunityCardsWidget({
-    Key? key,
+    super.key,
     required this.pot,
     this.communityCards = const [], // NOWE - domyślnie pusta lista
     this.playerCount = 2, // NOWE - domyślnie 2 graczy
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

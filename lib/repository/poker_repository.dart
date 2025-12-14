@@ -8,7 +8,6 @@ import '../models/sync_dto.dart';
 import '../exceptions/conflict_exception.dart';
 
 import '../models/request_dto.dart';
-import '../models/state_dto.dart';
 
 class PokerRepository {
   final Uri _joinPokerUrl = Uri.parse('http://10.0.2.2:8081/poker/join');

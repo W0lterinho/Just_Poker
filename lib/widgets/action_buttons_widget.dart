@@ -8,13 +8,13 @@ class ActionButtonsWidget extends StatelessWidget {
   final VoidCallback onRaise;
 
   const ActionButtonsWidget({
-    Key? key,
+    super.key,
     required this.canCheck,
     required this.callAmount,
     required this.onFold,
     required this.onCheckCall,
     required this.onRaise,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

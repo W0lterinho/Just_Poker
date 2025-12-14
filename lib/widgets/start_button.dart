@@ -5,10 +5,10 @@ class StartButton extends StatelessWidget {
   final VoidCallback onStart;
 
   const StartButton({
-    Key? key,
+    super.key,
     required this.sending,
     required this.onStart,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

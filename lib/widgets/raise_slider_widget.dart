@@ -10,14 +10,14 @@ class RaiseSliderWidget extends StatefulWidget {
   final VoidCallback onCancel;
 
   const RaiseSliderWidget({
-    Key? key,
+    super.key,
     required this.minRaise,
     required this.maxRaise,
     required this.currentAmount,
     required this.onAmountChanged,
     required this.onConfirm,
     required this.onCancel,
-  }) : super(key: key);
+  });
 
   @override
   State<RaiseSliderWidget> createState() => _RaiseSliderWidgetState();
@@ -74,7 +74,7 @@ class _RaiseSliderWidgetState extends State<RaiseSliderWidget> {
             ),
 
           // Suwak
-          Container(
+          SizedBox(
             height: 32,
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
@@ -164,7 +164,7 @@ class _RaiseSliderWidgetState extends State<RaiseSliderWidget> {
               ),
 
               // CONFIRM/ALL IN - węższy
-              Container(
+              SizedBox(
                 width: 100,
                 height: 36,
                 child: ElevatedButton(

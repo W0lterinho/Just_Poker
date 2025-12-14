@@ -7,11 +7,11 @@ class PokerCardWidget extends StatelessWidget {
   final bool showFront;    // Czy pokazujemy awers, czy rewers
 
   const PokerCardWidget({
-    Key? key,
+    super.key,
     required this.code,
     required this.height,
     this.showFront = true,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

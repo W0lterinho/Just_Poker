@@ -19,11 +19,11 @@ class GameScreen extends StatefulWidget {
   final dynamic syncDto;
 
   const GameScreen({
-    Key? key,
+    super.key,
     required this.tableCode,
     required this.isCreator,
     this.syncDto,
-  }) : super(key: key);
+  });
 
   @override
   State<GameScreen> createState() => _GameScreenState();

@@ -9,11 +9,11 @@ class CommunityCardsDisplayWidget extends StatefulWidget {
   final double maxCardHeight; // NOWE - maksymalna wysokość kart
 
   const CommunityCardsDisplayWidget({
-    Key? key,
+    super.key,
     required this.communityCards,
     required this.maxWidth,
     this.maxCardHeight = 70.0, // NOWE - domyślna wysokość
-  }) : super(key: key);
+  });
 
   @override
   State<CommunityCardsDisplayWidget> createState() => _CommunityCardsDisplayWidgetState();
@@ -24,10 +24,10 @@ class _CommunityCardsDisplayWidgetState extends State<CommunityCardsDisplayWidge
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<String> _displayedCards = [];
-  List<AnimationController> _animationControllers = [];
-  List<Animation<double>> _fadeAnimations = [];
-  List<Animation<Offset>> _slideAnimations = [];
-  List<Animation<double>> _scaleAnimations = [];
+  final List<AnimationController> _animationControllers = [];
+  final List<Animation<double>> _fadeAnimations = [];
+  final List<Animation<Offset>> _slideAnimations = [];
+  final List<Animation<double>> _scaleAnimations = [];
 
   // NOWE - Kolejka animacji i stan przetwarzania
   List<String> _pendingCards = [];

@@ -50,7 +50,7 @@ class InGameLayout extends StatelessWidget {
   final bool actionTimerGracePeriod;
 
   const InGameLayout({
-    Key? key,
+    super.key,
     required this.cards,
     required this.myChips,
     required this.pot,
@@ -84,7 +84,7 @@ class InGameLayout extends StatelessWidget {
     this.actionTimerSeconds,
     this.actionTimerUrgent = false,
     this.actionTimerGracePeriod = false,
-  }) : super(key: key);
+  });
 
   // Obraca listę tak, by lokalny był ostatni (na dole)
   List<PlayerDto> getRotatedPlayers(List<PlayerDto> allPlayers) {

@@ -11,7 +11,7 @@ import '../widgets/custom_text_field.dart';
 
 class JoinPrivateScreen extends StatefulWidget {
   static const routeName = '/join_private';
-  const JoinPrivateScreen({Key? key}) : super(key: key);
+  const JoinPrivateScreen({super.key});
 
   @override
   State<JoinPrivateScreen> createState() => _JoinPrivateScreenState();

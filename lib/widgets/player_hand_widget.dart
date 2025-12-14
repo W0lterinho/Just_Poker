@@ -15,7 +15,7 @@ class PlayerHandWidget extends StatefulWidget {
   final bool isEliminated; // czy gracz lokalny jest wyeliminowany
 
   const PlayerHandWidget({
-    Key? key,
+    super.key,
     required this.cards,
     required this.height,
     // NOWE - SHOWDOWN parametry
@@ -24,7 +24,7 @@ class PlayerHandWidget extends StatefulWidget {
     this.winSize, // NOWE
     // NOWE - ELIMINATION parametry
     this.isEliminated = false,
-  }) : super(key: key);
+  });
 
   @override
   State<PlayerHandWidget> createState() => _PlayerHandWidgetState();
@@ -116,7 +116,7 @@ class _PlayerHandWidgetState extends State<PlayerHandWidget>
 
     // NOWE - Wyeliminowany gracz pokazuje komunikat zamiast kart
     if (widget.isEliminated) {
-      return Container(
+      return SizedBox(
         width: totalWidth,
         height: widget.height,
         child: Center(

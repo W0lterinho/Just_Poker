@@ -26,7 +26,7 @@ class OpponentWidget extends StatefulWidget {
   final List<String> eliminatedEmails; // lista wyeliminowanych graczy
 
   const OpponentWidget({
-    Key? key,
+    super.key,
     required this.email, // DODANE
     required this.nick,
     required this.chips,
@@ -46,7 +46,7 @@ class OpponentWidget extends StatefulWidget {
     this.showingWinners = false,
     // NOWE - ELIMINATION parametry
     this.eliminatedEmails = const [],
-  }) : super(key: key);
+  });
 
   @override
   State<OpponentWidget> createState() => _OpponentWidgetState();
@@ -403,7 +403,7 @@ class _OpponentWidgetState extends State<OpponentWidget>
     return Positioned(
       bottom: iconSize * 0.1,
       left: (iconSize - totalWidth) / 2, // Centruj względem ikony
-      child: Container(
+      child: SizedBox(
         width: totalWidth,
         height: aversCardHeight,
         child: Row(
@@ -441,7 +441,7 @@ class _OpponentWidgetState extends State<OpponentWidget>
     return Positioned(
       bottom: iconSize * 0.1,
       left: (iconSize - (cardWidth + cardSpacing)) / 2,
-      child: Container(
+      child: SizedBox(
         width: cardWidth + cardSpacing,
         height: cardHeight,
         child: Stack(

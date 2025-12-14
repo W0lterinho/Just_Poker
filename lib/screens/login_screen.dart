@@ -44,39 +44,60 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             child: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    SvgPicture.asset('assets/brain.svg', width: 100),
-                    const SizedBox(height: 24),
-                    CustomTextField(
-                      controller: _emailCtrl,
-                      hint: 'Email',
-                    ),
-                    const SizedBox(height: 16),
-                    CustomTextField(
-                      controller: _passCtrl,
-                      hint: 'Password',
-                      obscure: true,
-                    ),
-                    const SizedBox(height: 24),
-                    state is AuthLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : CustomButton(
-                      text: 'Login',
-                      onPressed: () {
-                        BlocProvider.of<AuthBloc>(context).add(
-                          LoginRequested(
-                            _emailCtrl.text.trim(),
-                            _passCtrl.text.trim(),
+              // ZMIANA: LayoutBuilder pozwala pobrać dostępną wysokość
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    child: ConstrainedBox(
+                      // ZMIANA: Wymuszamy minimalną wysokość równą ekranowi
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      // ZMIANA: IntrinsicHeight pomaga w poprawnym rozłożeniu elementów w centrum
+                      child: IntrinsicHeight(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            // ZMIANA: Kluczowe centrowanie w pionie
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Usunięto górny SizedBox(height: 24), bo centrujemy
+                              SvgPicture.asset(
+                                'assets/brain.svg',
+                                width: 120, // ZMIANA: 100 -> 120 (ujednolicenie z Home)
+                              ),
+                              const SizedBox(height: 48), // ZMIANA: 24 -> 48 (ujednolicenie z Home)
+                              CustomTextField(
+                                controller: _emailCtrl,
+                                hint: 'Email',
+                              ),
+                              const SizedBox(height: 16),
+                              CustomTextField(
+                                controller: _passCtrl,
+                                hint: 'Password',
+                                obscure: true,
+                              ),
+                              const SizedBox(height: 24),
+                              state is AuthLoading
+                                  ? const CircularProgressIndicator(color: Colors.white)
+                                  : CustomButton(
+                                text: 'Login',
+                                onPressed: () {
+                                  BlocProvider.of<AuthBloc>(context).add(
+                                    LoginRequested(
+                                      _emailCtrl.text.trim(),
+                                      _passCtrl.text.trim(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           );

@@ -11,7 +11,6 @@ import '../repository/poker_repository.dart';
 import 'poker_tables_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../exceptions/conflict_exception.dart';
-import '../models/sync_dto.dart';
 import '../bloc/game/game_cubit.dart';
 import 'game_screen.dart';
 
@@ -226,7 +225,7 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
         Navigator.pushReplacementNamed(context, PokerTablesScreen.routeName);
       }
 
-    } on ConflictException catch (e) {
+    } on ConflictException {
       setState(() => _joining = false);
       await _showReconnectDialog(nick);
     } catch (e) {
@@ -259,9 +258,11 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center, // Dodatkowe upewnienie się
         children: [
-          SvgPicture.asset('assets/brain.svg', width: 150, height: 150),
-          const SizedBox(height: 48),
+          // ZMIANA: width 150 -> 120 (ujednolicenie)
+          SvgPicture.asset('assets/brain.svg', width: 120, height: 120),
+          const SizedBox(height: 48), // To już było OK, zostawiamy
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
@@ -285,49 +286,83 @@ class _ChoiceScreenState extends State<ChoiceScreen> {
 
   Widget _buildJoinSection() {
     final isEmpty = _nickCtrl.text.trim().isEmpty;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        children: [
-          Align(
-            alignment: Alignment.topRight,
-            child: TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _showJoinForm = false;
-                  _errorMsg    = null;
-                  _nickCtrl.clear();
-                });
-              },
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              label: const Text('Back', style: TextStyle(color: Colors.white)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SvgPicture.asset('assets/brain.svg', width: 120, height: 120),
-          const SizedBox(height: 32),
-          if (_errorMsg != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                _errorMsg!,
-                style: const TextStyle(color: Colors.redAccent),
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          // SingleChildScrollView + ConstrainedBox zapewnia, że
+          // zawartość ma co najmniej wysokość ekranu, ale można ją przewijać.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            // IntrinsicHeight jest kluczowy - naprawia błąd "RenderBox was not laid out"
+            // pozwalając Stackowi poprawnie obliczyć rozmiar wewnątrz ScrollView.
+            child: IntrinsicHeight(
+              child: Stack(
+                children: [
+                  // 1. Wycentrowana treść (Logo + Formularz)
+                  // Używamy Align zamiast Center wewnątrz Stacka dla lepszej kontroli
+                  Align(
+                    alignment: Alignment.center,
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SvgPicture.asset('assets/brain.svg', width: 120, height: 120),
+                          const SizedBox(height: 48),
+                          if (_errorMsg != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                _errorMsg!,
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            ),
+                          CustomTextField(
+                            controller: _nickCtrl,
+                            hint: 'provide the nickname',
+                          ),
+                          const SizedBox(height: 24),
+                          if (_joining || _reconnecting)
+                            const CircularProgressIndicator(color: Colors.white)
+                          else
+                            CustomButton(
+                              text: 'Join',
+                              onPressed: isEmpty ? null : _onJoin,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 2. Przycisk Back - "przyklejony" do góry po prawej
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _showJoinForm = false;
+                              _errorMsg = null;
+                              _nickCtrl.clear();
+                            });
+                          },
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          label: const Text('Back', style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          CustomTextField(
-            controller: _nickCtrl,
-            hint:       'provide the nickname',
           ),
-          const SizedBox(height: 24),
-          if (_joining || _reconnecting)
-            const CircularProgressIndicator()
-          else
-            CustomButton(
-              text: 'Join',
-              onPressed: isEmpty ? null : _onJoin,
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

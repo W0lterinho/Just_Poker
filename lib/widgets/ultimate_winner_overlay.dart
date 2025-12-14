@@ -6,10 +6,10 @@ class UltimateWinnerOverlay extends StatefulWidget {
   final VoidCallback onBackToLobby; // callback do powrotu do lobby
 
   const UltimateWinnerOverlay({
-    Key? key,
+    super.key,
     required this.ultimateWinner,
     required this.onBackToLobby,
-  }) : super(key: key);
+  });
 
   @override
   State<UltimateWinnerOverlay> createState() => _UltimateWinnerOverlayState();
