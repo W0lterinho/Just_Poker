@@ -103,68 +103,43 @@ class InGameLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('InGameLayout: cardsVisible=$cardsVisible, isMyTurn=$isMyTurn, showingRaiseSlider=$showingRaiseSlider, showingRevealedCards=$showingRevealedCards, showingWinners=$showingWinners, eliminatedEmails=$eliminatedEmails');
+    print('InGameLayout: Clean UI Build');
 
-    final usableH = MediaQuery.of(context).size.height - MediaQuery.of(context).padding.vertical;
+    final pad = MediaQuery.of(context).padding;
+    final usableH = MediaQuery.of(context).size.height - pad.vertical;
     final rotatedPlayers = getRotatedPlayers(allPlayers);
     final localPlayer = rotatedPlayers.isNotEmpty ? rotatedPlayers.last : null;
     final isDealer = localPlayer != null && dealerMail == localPlayer.email;
-
-    // Używamy roundBets tak jak pokazuje log
     final myChipsInRound = roundBets[localEmail] ?? 0;
 
-    // NOWE - Sprawdź czy gracz lokalny jest zwycięzcą i wyeliminowanym
+    // Statusy lokalnego gracza
     final isLocalWinner = winners.contains(localEmail);
     final isLocalEliminated = eliminatedEmails.contains(localEmail);
-    final localWinSize = winnerWinSizes[localEmail]; // NOWE - pobierz winSize lokalnego gracza
+    final localWinSize = winnerWinSizes[localEmail];
 
-    // Debug
-    print('DEBUG: localEmail=$localEmail, roundBets=$roundBets, myChipsInRound=$myChipsInRound, isLocalWinner=$isLocalWinner, isLocalEliminated=$isLocalEliminated, localWinSize=$localWinSize');
+    // --- NOWA LOGIKA ROZMIARÓW I POZYCJI ---
 
-    // Odpowiada za to, by tylko przeciwnicy szli do OpponentLayer:
+    // 1. Karta ma stałą, rozsądną wysokość zależną od ekranu, ale nie za wielką.
+    // Dajemy jej mniej miejsca niż wcześniej, bo jest niżej.
+    final cardHeight = usableH * 0.20; // Ok. 20% wysokości ekranu
+
+    // 2. Dolny margines dla kart (aby nie dotykały samej krawędzi)
+    final cardsBottomPos = pad.bottom + 10;
+
+    // 3. Pozycja Przycisków Akcji / Suwaka - TUŻ NAD KARTAMI
+    // offset = margines dolny + wysokość kart + mały odstęp
+    final actionsBottomPos = cardsBottomPos + cardHeight + 12;
+
+    // 4. Pozycja napisu wygranej (jeszcze wyżej)
+    final winSizeBottomPos = actionsBottomPos + 60;
+
+    // Lista przeciwników
     final visibleOpponents = rotatedPlayers.where((p) => p.email != localEmail).toList();
-
-    // LOGIKA WYSOKOŚCI z uwzględnieniem liczby przeciwników
-    double cardHeight;
-    double actionsOffset;
-    double winSizeOffset; // ZMIENIONE - offset dla winSize (zamiast chipsInRoundOffset)
-
-    // Sprawdzenie liczby przeciwników (wszystkich graczy minus lokalny)
-    final opponentCount = allPlayers.length - 1;
-
-    if (isMyTurn && showingRaiseSlider) {
-      // Stan: suwak raise
-      if (opponentCount >= 6) {
-        cardHeight = usableH * 0.15; // 15% - bardzo małe karty przy 6+ przeciwnikach z suwakiem
-      } else {
-        cardHeight = usableH * 0.18; // 18% - standardowy rozmiar z suwakiem
-      }
-      actionsOffset = MediaQuery.of(context).padding.bottom + 60 + cardHeight + 10;
-      winSizeOffset = actionsOffset + 75;
-    } else if (isMyTurn) {
-      // Stan: przyciski akcji
-      if (opponentCount >= 6) {
-        cardHeight = usableH * 0.18; // 18% - zmniejszone karty przy 6+ przeciwnikach z przyciskami
-      } else {
-        cardHeight = usableH * 0.22; // 22% - standardowy rozmiar z przyciskami
-      }
-      actionsOffset = MediaQuery.of(context).padding.bottom + 60 + cardHeight + 10;
-      winSizeOffset = actionsOffset + 60;
-    } else {
-      // Stan: normalny
-      if (opponentCount >= 6) {
-        cardHeight = usableH * 0.22; // 22% - zmniejszone karty przy 6+ przeciwnikach (jak poprzednio z przyciskami)
-      } else {
-        cardHeight = usableH * 0.28; // 28% - pełne karty przy mniejszej liczbie przeciwników
-      }
-      actionsOffset = 0; // Nie używane
-      winSizeOffset = MediaQuery.of(context).padding.bottom + 60 + cardHeight + 10;
-    }
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Przeciwnicy na stole (wszyscy, ale z info gdzie lokalny)
+        // WARSTWA 1: PRZECIWNICY (z nowymi pozycjami z opponent_layer.dart)
         if (visibleOpponents.isNotEmpty && localPlayer != null)
           OpponentLayer(
             opponents: allPlayers,
@@ -174,69 +149,65 @@ class InGameLayout extends StatelessWidget {
             roundBets: roundBets,
             localSeatIndex: localPlayer.seatIndex,
             showCards: cardsVisible,
-            // NOWE - SHOWDOWN parametry
             revealedCards: revealedCards,
             showingRevealedCards: showingRevealedCards,
             winners: winners,
-            winnerWinSizes: winnerWinSizes, // NOWE - przekazujemy winSizes
+            winnerWinSizes: winnerWinSizes,
             showingWinners: showingWinners,
-            // NOWE - ELIMINATION parametry
             eliminatedEmails: eliminatedEmails,
           ),
 
-        // Pot i karty wspólne
+        // WARSTWA 2: KARTY WSPÓLNE I POT
+        // Dzięki zmianom w OpponentLayer, środek stołu jest teraz pusty i bezpieczny
         CommunityCardsWidget(
           pot: pot,
           communityCards: communityCards,
           playerCount: allPlayers.length,
         ),
 
-        // ZMIENIONE - Wyświetlanie winSize lub chipsInRound lokalnego gracza
+        // WARSTWA 3: Wyświetlanie wygranej / żetonów w rundzie (NA SAMYM ŚRODKU NAD AKCJAMI)
         Positioned(
-          bottom: winSizeOffset,
+          bottom: winSizeBottomPos,
           left: 0,
           right: 0,
           child: Center(
             child: Builder(
               builder: (context) {
-                // NOWA LOGIKA - pokazuj winSize gdy showingWinners i gracz wygrał
                 if (showingWinners && isLocalWinner && localWinSize != null && localWinSize > 0) {
                   return Text(
                     '+$localWinSize',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.yellow,
                       fontWeight: FontWeight.bold,
-                      fontSize: 32,
-                      shadows: const [
+                      fontSize: 36,
+                      shadows: [
                         Shadow(blurRadius: 2, color: Colors.black54),
-                        Shadow(blurRadius: 8, color: Colors.yellow),
+                        Shadow(blurRadius: 10, color: Colors.yellow),
                       ],
                     ),
                   );
-                }
-                // W przeciwnym razie pokazuj chipsInRound (jeśli NIE showingWinners)
-                else if (!showingWinners && myChipsInRound > 0) {
+                } else if (!showingWinners && myChipsInRound > 0) {
                   return Text(
                     '+$myChipsInRound',
                     style: const TextStyle(
                       color: Colors.greenAccent,
                       fontWeight: FontWeight.bold,
-                      fontSize: 32,
+                      fontSize: 28,
                       shadows: [Shadow(blurRadius: 2, color: Colors.black54)],
                     ),
                   );
                 }
-                // W pozostałych przypadkach nic nie pokazuj
                 return const SizedBox.shrink();
               },
             ),
           ),
         ),
 
-        // PRZYCISKI AKCJI - pokazywane tylko gdy karty widoczne I to kolej gracza I NIE jest wyeliminowany
+        // WARSTWA 4: PRZYCISKI AKCJI (Tuż nad kartami)
+        // Pokazywane tylko gdy moja tura, brak suwaka, karty widoczne, nie wyeliminowany
         if (isMyTurn && !showingRaiseSlider && cardsVisible && !isLocalEliminated)
           Positioned(
-            bottom: actionsOffset,
+            bottom: actionsBottomPos,
             left: 0,
             right: 0,
             child: ActionButtonsWidget(
@@ -248,14 +219,14 @@ class InGameLayout extends StatelessWidget {
             ),
           ),
 
-        // SUWAK RAISE - pokazywany gdy wybrano raise I karty widoczne I NIE jest wyeliminowany
+        // WARSTWA 5: SUWAK RAISE (W tym samym miejscu co przyciski)
         if (isMyTurn && showingRaiseSlider && cardsVisible && !isLocalEliminated)
           Positioned(
-            bottom: actionsOffset,
+            bottom: actionsBottomPos,
             left: 0,
             right: 0,
             child: RaiseSliderWidget(
-              minRaise: nextPlayerToCall + 10, // NOWA LOGIKA - minRaise = nextPlayerToCall + 10
+              minRaise: nextPlayerToCall + 10,
               maxRaise: myChips,
               currentAmount: raiseAmount,
               onAmountChanged: onRaiseAmountChanged ?? (int value) {},
@@ -264,73 +235,74 @@ class InGameLayout extends StatelessWidget {
             ),
           ),
 
-        // Karty lokalnego gracza - DOSTOSOWANA WYSOKOŚĆ (zmienia się dynamicznie)
+        // WARSTWA 6: KARTY GRACZA LOKALNEGO (Na samym dole, wyśrodkowane)
         Positioned(
-          bottom: MediaQuery.of(context).padding.bottom + 60,
+          bottom: cardsBottomPos,
           left: 0,
           right: 0,
           child: Center(
             child: PlayerHandWidget(
               cards: cards,
-              height: cardHeight, // Dynamiczna wysokość
-              // NOWE - SHOWDOWN parametry dla lokalnego zwycięzcy
+              height: cardHeight,
               isWinner: isLocalWinner,
               showingWinners: showingWinners,
-              winSize: localWinSize, // NOWE - przekazujemy winSize
-              // NOWE - ELIMINATION parametry dla lokalnego gracza
+              winSize: localWinSize,
               isEliminated: isLocalEliminated,
             ),
           ),
         ),
 
-        // Żetony lokalnego gracza i DEALER jeśli jest - UKRYTE dla wyeliminowanych
+        // --- ROGI DOLNE EKRANU (Oddzielone od kart dla przejrzystości) ---
+
+        // LEWY DOLNY RÓG: Timer + Dealer Button
         if (!isLocalEliminated)
           Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 10,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            bottom: pad.bottom + 10,
+            left: 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Dealer Button (nad timerem lub samodzielnie)
                 if (isDealer)
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: SvgPicture.asset(
-                      'assets/dealer.svg',
-                      width: 28,
-                      height: 28,
-                    ),
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: SvgPicture.asset('assets/dealer.svg', width: 26, height: 26),
                   ),
-                // Ikona żetonu zamiast kwadratu
+
+                // Timer (tylko w mojej turze)
+                if (isMyTurn && cardsVisible && actionTimerSeconds != null && !actionTimerGracePeriod)
+                  ActionTimerWidget(
+                    seconds: actionTimerSeconds!,
+                    isUrgent: actionTimerUrgent,
+                  ),
+              ],
+            ),
+          ),
+
+        // PRAWY DOLNY RÓG: Ilość Żetonów Gracza
+        if (!isLocalEliminated)
+          Positioned(
+            bottom: pad.bottom + 15, // Trochę wyżej dla równowagi optycznej
+            right: 16,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: SvgPicture.asset(
-                    'assets/chips.svg',
-                    width: 28,
-                    height: 28,
-                  ),
+                  child: SvgPicture.asset('assets/chips.svg', width: 24, height: 24),
                 ),
                 Text(
                   '${localPlayer?.chips ?? myChips}',
                   style: const TextStyle(
                     fontFamily: 'Montserrat',
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                     shadows: [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black45)],
                   ),
                 ),
               ],
-            ),
-          ),
-        // NOWE - ACTION TIMER - lewy dolny róg
-        if (isMyTurn && cardsVisible && actionTimerSeconds != null && !actionTimerGracePeriod)
-          Positioned(
-            bottom: MediaQuery.of(context).padding.bottom + 10,
-            left: 16,
-            child: ActionTimerWidget(
-              seconds: actionTimerSeconds!,
-              isUrgent: actionTimerUrgent,
             ),
           ),
       ],

@@ -1,7 +1,35 @@
-<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-    <title id="title">Tiny Dealer Button</title>
-    <desc id="desc">Smaller white circle with a larger centered letter D</desc>
-    <circle cx="8" cy="8" r="7" fill="#FFFFFF" stroke="#000000" stroke-width="1"/>
-    <text x="8" y="8" text-anchor="middle" dominant-baseline="middle"
-        font-family="Arial, sans-serif" font-size="10" fill="#000000" font-weight="bold">D</text>
+<svg width="250" height="250" viewBox="0 0 250 250" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <radialGradient id="faceGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+            <stop offset="85%" style="stop-color:#f5f5f5;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#e8e8e8;stop-opacity:1" />
+        </radialGradient>
+
+        <linearGradient id="rimGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#444444;stop-opacity:1" />
+            <stop offset="30%" style="stop-color:#000000;stop-opacity:1" />
+            <stop offset="70%" style="stop-color:#000000;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#444444;stop-opacity:1" />
+        </linearGradient>
+
+        <linearGradient id="highlightGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.7" />
+            <stop offset="90%" style="stop-color:#ffffff;stop-opacity:0.0" />
+        </linearGradient>
+    </defs>
+
+    <g>
+        <circle cx="125" cy="125" r="120" fill="url(#rimGradient)" stroke="#1a1a1a" stroke-width="1"/>
+
+        <circle cx="125" cy="125" r="102" fill="url(#faceGradient)" stroke="#cccccc" stroke-width="1"/>
+
+        <circle cx="125" cy="125" r="92" fill="none" stroke="#000000" stroke-width="0.75" opacity="0.2"/>
+    </g>
+
+    <path d="M80 75 L80 175 L125 175 C165 175 185 155 185 125 C185 95 165 75 125 75 L80 75 Z M115 100 L125 100 C140 100 148 110 148 125 C148 140 140 150 125 150 L115 150 L115 100 Z"
+        fill="#000000"
+        fill-rule="evenodd"/>
+
+    <ellipse cx="125" cy="80" rx="85" ry="45" fill="url(#highlightGradient)"/>
 </svg>

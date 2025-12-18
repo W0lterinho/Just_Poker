@@ -104,41 +104,29 @@ class _OpponentWidgetState extends State<OpponentWidget>
     super.dispose();
   }
 
+  // W pliku: lib/widgets/opponent_widget.dart
+
+  // ... (początek pliku bez zmian aż do metody build)
+
   @override
   Widget build(BuildContext context) {
     final isWinner = widget.winners.contains(widget.email) && widget.showingWinners;
-    final isEliminated = widget.eliminatedEmails.contains(widget.email); // NOWE
-    final winSize = widget.winnerWinSizes[widget.email]; // NOWE - pobierz winSize
+    final isEliminated = widget.eliminatedEmails.contains(widget.email);
+    final winSize = widget.winnerWinSizes[widget.email];
 
-    print('OpponentWidget dla ${widget.nick}: showCards=${widget.showCards}, isFolded=${widget.isFolded}, lastAction=${widget.lastAction}, isWinner=$isWinner, isEliminated=$isEliminated, showingRevealedCards=${widget.showingRevealedCards}, revealedCards=${widget.revealedCards}, winSize=$winSize');
-
-    // NOWY SZCZEGÓŁOWY LOG
-    if (widget.revealedCards != null) {
-      print('OpponentWidget ${widget.nick}: revealedCards zawiera klucze: ${widget.revealedCards!.keys.toList()}');
-      if (widget.revealedCards!.containsKey(widget.email)) {
-        print('OpponentWidget ${widget.nick}: moje karty to: ${widget.revealedCards![widget.email]}');
-      } else {
-        print('OpponentWidget ${widget.nick}: nie ma moich kart w revealedCards');
-      }
-    } else {
-      print('OpponentWidget ${widget.nick}: revealedCards jest null');
-    }
-
+    // Parametry rozmiarowe
     final double iconSize = 50.0 * widget.scale;
     final double cardHeight = 18.0 * widget.scale;
     final double cardWidth = cardHeight * 0.7;
     final double cardSpacing = cardWidth * 0.3;
-
-    // NOWE - Rozmiary kart avers (+33% większe)
     final double aversCardHeight = cardHeight * 1.33;
     final double aversCardWidth = aversCardHeight * 0.7;
-    final double aversCardSpacing = aversCardWidth * 0.15; // Mniejszy spacing dla kart avers
+    final double aversCardSpacing = aversCardWidth * 0.15;
 
-    // NOWE - Oblicz opacity na podstawie stanu eliminated i folded
     double calculateOpacity() {
-      if (isEliminated) return 0.5; // Wyeliminowany gracz
-      if (widget.isFolded) return 0.4; // Gracz po FOLD
-      return 1.0; // Normalny gracz
+      if (isEliminated) return 0.5;
+      if (widget.isFolded) return 0.4;
+      return 1.0;
     }
 
     return Align(
@@ -151,7 +139,7 @@ class _OpponentWidgetState extends State<OpponentWidget>
             return Stack(
               clipBehavior: Clip.none,
               children: [
-                // Główna ikona gracza z potencjalną przezroczystością i pulsującym podświetleniem
+                // GŁÓWNA STRUKTURA (Ikona + Teksty)
                 Container(
                   decoration: isWinner ? BoxDecoration(
                     borderRadius: BorderRadius.circular(iconSize * 0.15),
@@ -168,13 +156,16 @@ class _OpponentWidgetState extends State<OpponentWidget>
                     ],
                   ) : null,
                   child: Opacity(
-                    opacity: calculateOpacity(), // ZMIENIONE - używa nowej funkcji
+                    opacity: calculateOpacity(),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // STACK AVATARA (Ikona + Karty + Badges)
                         Stack(
                           clipBehavior: Clip.none,
+                          alignment: Alignment.center,
                           children: [
+                            // 1. IKONA GRACZA
                             SvgPicture.asset(
                               'assets/player.svg',
                               width: iconSize,
@@ -182,11 +173,11 @@ class _OpponentWidgetState extends State<OpponentWidget>
                               fit: BoxFit.contain,
                             ),
 
-                            // NOWA LOGIKA KART - conditional rendering
+                            // 2. KARTY (Avers/Revers)
                             _buildCardsDisplay(iconSize, cardHeight, cardWidth, cardSpacing,
                                 aversCardHeight, aversCardWidth, aversCardSpacing, isEliminated),
 
-                            // Dealer badge - też skalowany
+                            // 3. DEALER BADGE
                             if (widget.isDealer)
                               Positioned(
                                 left: -8 * widget.scale,
@@ -198,36 +189,70 @@ class _OpponentWidgetState extends State<OpponentWidget>
                                 ),
                               ),
 
-                            // NOWE - ELIMINATED badge
+                            // 4. ELIMINATED BADGE
                             if (isEliminated)
                               Positioned(
                                 right: -8 * widget.scale,
                                 top: -6 * widget.scale,
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 4 * widget.scale,
-                                    vertical: 2 * widget.scale,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.9),
-                                    borderRadius: BorderRadius.circular(4 * widget.scale),
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 1 * widget.scale,
+                                child: _buildBadge('OUT', Colors.red),
+                              ),
+
+                            // 5. ACTION STATUS BADGE (NOWOŚĆ!)
+                            // Wyświetlamy status BEZPOŚREDNIO NA AVATARZE (na dole)
+                            if (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated)
+
+                            // 5. ACTION STATUS BADGE (SUBTELNA WERSJA Z ANIMACJĄ)
+                              Positioned(
+                                bottom: -2 * widget.scale, // Lekka korekta pozycji, żeby ładniej nachodziło
+                                child: AnimatedOpacity(
+                                  // Logika: Jeśli jest akcja i gracz nie jest wyeliminowany -> pokaż (opacity 1.0)
+                                  // W przeciwnym razie -> ukryj płynnie (opacity 0.0)
+                                  opacity: (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated) ? 1.0 : 0.0,
+                                  duration: const Duration(milliseconds: 300), // Czas trwania animacji (np. 300ms)
+                                  curve: Curves.easeInOut, // Płynna krzywa animacji
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 5 * widget.scale,
+                                      vertical: 1.5 * widget.scale,
                                     ),
-                                  ),
-                                  child: Text(
-                                    'OUT',
-                                    style: TextStyle(
-                                      fontSize: 6 * widget.scale,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                    decoration: BoxDecoration(
+                                      // ZMIANA: Dużo większa przeźroczystość tła (0.6 zamiast 0.9)
+                                      color: _getActionColor(widget.lastAction ?? '').withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(6 * widget.scale),
+                                      // ZMIANA: Cieńsze i półprzezroczyste obramowanie
+                                      border: Border.all(
+                                          color: Colors.white.withOpacity(0.5),
+                                          width: 0.5 * widget.scale
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2), // Delikatniejszy cień
+                                          blurRadius: 3 * widget.scale,
+                                          offset: const Offset(0, 1),
+                                        )
+                                      ],
+                                    ),
+                                    child: Text(
+                                      // Używamy operatora ?? '', aby uniknąć błędu na nullu podczas animacji zanikania
+                                      (widget.lastAction ?? '').toUpperCase(),
+                                      style: TextStyle(
+                                          fontSize: 7.5 * widget.scale, // Minimalnie mniejsza czcionka
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white.withOpacity(0.95), // Lekko złamana biel
+                                          letterSpacing: 0.3,
+                                          // Dodajemy delikatny cień do tekstu, żeby był czytelny na jasnym tle (np. żółty CHECK)
+                                          shadows: [
+                                            Shadow(blurRadius: 1, color: Colors.black.withOpacity(0.3), offset: const Offset(0, 0.5))
+                                          ]
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
                           ],
                         ),
+
+                        // TEKSTY POD IKONĄ (Nick, Chips)
                         SizedBox(height: 2 * widget.scale),
                         Text(
                           widget.nick,
@@ -239,13 +264,10 @@ class _OpponentWidgetState extends State<OpponentWidget>
                             fontFamily: 'Roboto',
                             color: widget.isActive ? Colors.yellow : Colors.white,
                             shadows: const [
-                              Shadow(offset: Offset(0, 1),
-                                  blurRadius: 2,
-                                  color: Colors.black54),
+                              Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54),
                             ],
                           ),
                         ),
-                        // NOWE - Nie pokazuj żetonów dla wyeliminowanych graczy
                         if (!isEliminated) ...[
                           Text(
                             '${widget.chips}',
@@ -256,13 +278,11 @@ class _OpponentWidgetState extends State<OpponentWidget>
                               fontWeight: FontWeight.w900,
                               color: Colors.white70,
                               shadows: const [
-                                Shadow(offset: Offset(0, 1),
-                                    blurRadius: 2,
-                                    color: Colors.black54),
+                                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54),
                               ],
                             ),
                           ),
-                          // ZMIENIONE - Pokazuj winSize podczas showingWinners zamiast chipsInRound
+                          // Win Amount / Round Bets
                           if (widget.showingWinners && isWinner && winSize != null && winSize > 0)
                             Padding(
                               padding: EdgeInsets.only(top: 1.0 * widget.scale),
@@ -279,7 +299,6 @@ class _OpponentWidgetState extends State<OpponentWidget>
                                 ),
                               ),
                             )
-                          // Pokaż chipsInRound TYLKO gdy NIE showingWinners
                           else if (!widget.showingWinners && widget.chipsInRound > 0)
                             Padding(
                               padding: EdgeInsets.only(top: 1.0 * widget.scale),
@@ -300,60 +319,6 @@ class _OpponentWidgetState extends State<OpponentWidget>
                     ),
                   ),
                 ),
-
-                // Wyświetlenie ostatniej akcji gracza - nad ikoną (TYLKO dla nie-wyeliminowanych)
-                // NOWY STYL - minimalistyczny, bez ramki
-                if (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated)
-                  Positioned(
-                    top: -20 * widget.scale,
-                    left: -10 * widget.scale,
-                    right: -10 * widget.scale,
-                    child: Center(
-                      child: Text(
-                        widget.lastAction!.toUpperCase(),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 9 * widget.scale,
-                          fontWeight: FontWeight.w900,
-                          color: _getActionColor(widget.lastAction!),
-                          shadows: [
-                            // Mocny czarny cień dla kontrastu
-                            Shadow(
-                              blurRadius: 3 * widget.scale,
-                              color: Colors.black.withOpacity(0.9),
-                              offset: Offset(0, 1 * widget.scale),
-                            ),
-                            Shadow(
-                              blurRadius: 6 * widget.scale,
-                              color: Colors.black.withOpacity(0.6),
-                              offset: Offset(0, 2 * widget.scale),
-                            ),
-                            // Dodatkowy outline efekt
-                            Shadow(
-                              blurRadius: 1 * widget.scale,
-                              color: Colors.black,
-                              offset: Offset(-0.5 * widget.scale, -0.5 * widget.scale),
-                            ),
-                            Shadow(
-                              blurRadius: 1 * widget.scale,
-                              color: Colors.black,
-                              offset: Offset(0.5 * widget.scale, -0.5 * widget.scale),
-                            ),
-                            Shadow(
-                              blurRadius: 1 * widget.scale,
-                              color: Colors.black,
-                              offset: Offset(-0.5 * widget.scale, 0.5 * widget.scale),
-                            ),
-                            Shadow(
-                              blurRadius: 1 * widget.scale,
-                              color: Colors.black,
-                              offset: Offset(0.5 * widget.scale, 0.5 * widget.scale),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             );
           },
@@ -361,6 +326,31 @@ class _OpponentWidgetState extends State<OpponentWidget>
       ),
     );
   }
+
+  // Pomocnicza metoda dla Badge'a OUT
+  Widget _buildBadge(String text, Color color) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: 4 * widget.scale,
+        vertical: 2 * widget.scale,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(4 * widget.scale),
+        border: Border.all(color: Colors.white, width: 1 * widget.scale),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 6 * widget.scale,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  // ... (reszta metod: _buildCardsDisplay, _buildRevealedCards itd. bez zmian)
   // ZAKTUALIZOWANA METODA - Budowanie wyświetlania kart z obsługą eliminated
   Widget _buildCardsDisplay(double iconSize, double cardHeight, double cardWidth, double cardSpacing,
       double aversCardHeight, double aversCardWidth, double aversCardSpacing, bool isEliminated) {
