@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../widgets/poker_card_widget.dart';
 
 class OpponentWidget extends StatefulWidget {
-  final String email; // DODANE - potrzebne dla revealed cards i winner detection
+  final String email;
   final String nick;
   final int chips;
   final Alignment alignment;
@@ -11,23 +11,23 @@ class OpponentWidget extends StatefulWidget {
   final bool isActive;
   final bool isDealer;
   final int chipsInRound;
-  final bool showCards; // czy pokazywać karty (normalne tryłem)
-  final bool isFolded; // czy gracz spasował
-  final String? lastAction; // ostatnia akcja gracza
+  final bool showCards;
+  final bool isFolded;
+  final String? lastAction;
 
-  // NOWE - SHOWDOWN funkcjonalności
-  final Map<String, List<String>>? revealedCards; // {email: [karta1, karta2]} - karty do pokazania
-  final bool showingRevealedCards; // czy faza pokazywania kart jest aktywna
-  final List<String> winners; // lista zwycięzców
-  final Map<String, int> winnerWinSizes; // NOWE - {email: winSize} - wygrane kwoty
-  final bool showingWinners; // czy faza pokazywania zwycięzców jest aktywna
+  // SHOWDOWN parametry
+  final Map<String, List<String>>? revealedCards;
+  final bool showingRevealedCards;
+  final List<String> winners;
+  final Map<String, int> winnerWinSizes;
+  final bool showingWinners;
 
-  // NOWE - ELIMINATION funkcjonalności
-  final List<String> eliminatedEmails; // lista wyeliminowanych graczy
+  // ELIMINATION parametry
+  final List<String> eliminatedEmails;
 
   const OpponentWidget({
     super.key,
-    required this.email, // DODANE
+    required this.email,
     required this.nick,
     required this.chips,
     required this.alignment,
@@ -38,13 +38,11 @@ class OpponentWidget extends StatefulWidget {
     this.showCards = false,
     this.isFolded = false,
     this.lastAction,
-    // NOWE - SHOWDOWN parametry
     this.revealedCards,
     this.showingRevealedCards = false,
     this.winners = const [],
-    this.winnerWinSizes = const {}, // NOWE
+    this.winnerWinSizes = const {},
     this.showingWinners = false,
-    // NOWE - ELIMINATION parametry
     this.eliminatedEmails = const [],
   });
 
@@ -52,9 +50,7 @@ class OpponentWidget extends StatefulWidget {
   State<OpponentWidget> createState() => _OpponentWidgetState();
 }
 
-class _OpponentWidgetState extends State<OpponentWidget>
-    with TickerProviderStateMixin {
-
+class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStateMixin {
   AnimationController? _pulseController;
   Animation<double>? _pulseAnimation;
 
@@ -66,14 +62,10 @@ class _OpponentWidgetState extends State<OpponentWidget>
 
   void _setupPulseAnimation() {
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1000), // 1 sekunda cykl pulsowania
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-
-    _pulseAnimation = Tween<double>(
-      begin: 0.3,
-      end: 1.0,
-    ).animate(CurvedAnimation(
+    _pulseAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(
       parent: _pulseController!,
       curve: Curves.easeInOut,
     ));
@@ -82,17 +74,12 @@ class _OpponentWidgetState extends State<OpponentWidget>
   @override
   void didUpdateWidget(OpponentWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // Sprawdź czy gracz stał się zwycięzcą
     final isWinner = widget.winners.contains(widget.email);
     final wasWinner = oldWidget.winners.contains(widget.email);
 
     if (isWinner && widget.showingWinners && !wasWinner) {
-      // Rozpocznij pulsowanie
-      print('Rozpoczynam pulsowanie dla zwycięzcy: ${widget.nick}');
       _pulseController?.repeat(reverse: true);
     } else if (!isWinner || !widget.showingWinners) {
-      // Zatrzymaj pulsowanie
       _pulseController?.stop();
       _pulseController?.reset();
     }
@@ -104,230 +91,102 @@ class _OpponentWidgetState extends State<OpponentWidget>
     super.dispose();
   }
 
-  // W pliku: lib/widgets/opponent_widget.dart
-
-  // ... (początek pliku bez zmian aż do metody build)
-
-  @override
-  Widget build(BuildContext context) {
-    final isWinner = widget.winners.contains(widget.email) && widget.showingWinners;
-    final isEliminated = widget.eliminatedEmails.contains(widget.email);
-    final winSize = widget.winnerWinSizes[widget.email];
-
-    // Parametry rozmiarowe
-    final double iconSize = 50.0 * widget.scale;
-    final double cardHeight = 18.0 * widget.scale;
-    final double cardWidth = cardHeight * 0.7;
-    final double cardSpacing = cardWidth * 0.3;
-    final double aversCardHeight = cardHeight * 1.33;
-    final double aversCardWidth = aversCardHeight * 0.7;
-    final double aversCardSpacing = aversCardWidth * 0.15;
-
-    double calculateOpacity() {
-      if (isEliminated) return 0.5;
-      if (widget.isFolded) return 0.4;
-      return 1.0;
+  Color _getActionColor(String action) {
+    switch (action.toUpperCase()) {
+      case 'FOLD': return const Color(0xFFD32F2F);
+      case 'CHECK': return const Color(0xFF1976D2);
+      case 'CALL': return const Color(0xFF1976D2);
+      case 'RAISE':
+      case 'RISE': return const Color(0xFF388E3C);
+      case 'ALL_IN': return const Color(0xFFFF9800);
+      default: return const Color(0xFF616161);
     }
+  }
 
-    return Align(
-      alignment: widget.alignment,
-      child: OverflowBox(
-        maxWidth: double.infinity,
-        child: AnimatedBuilder(
-          animation: _pulseAnimation ?? const AlwaysStoppedAnimation(1.0),
-          builder: (context, child) {
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // GŁÓWNA STRUKTURA (Ikona + Teksty)
-                Container(
-                  decoration: isWinner ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(iconSize * 0.15),
-                    border: Border.all(
-                      color: Colors.yellow.withOpacity(_pulseAnimation?.value ?? 1.0),
-                      width: 3 * widget.scale,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.yellow.withOpacity((_pulseAnimation?.value ?? 1.0) * 0.6),
-                        blurRadius: 15 * widget.scale,
-                        spreadRadius: 3 * widget.scale,
-                      ),
-                    ],
-                  ) : null,
-                  child: Opacity(
-                    opacity: calculateOpacity(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // STACK AVATARA (Ikona + Karty + Badges)
-                        Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            // 1. IKONA GRACZA
-                            SvgPicture.asset(
-                              'assets/player.svg',
-                              width: iconSize,
-                              height: iconSize,
-                              fit: BoxFit.contain,
-                            ),
+  // --- METODY BUDUJĄCE KARTY ---
 
-                            // 2. KARTY (Avers/Revers)
-                            _buildCardsDisplay(iconSize, cardHeight, cardWidth, cardSpacing,
-                                aversCardHeight, aversCardWidth, aversCardSpacing, isEliminated),
+  Widget _buildCardsDisplay(double iconSize, double cardHeight, double cardWidth, double cardSpacing,
+      double aversCardHeight, double aversCardWidth, double aversCardSpacing, bool isEliminated) {
 
-                            // 3. DEALER BADGE
-                            if (widget.isDealer)
-                              Positioned(
-                                left: -8 * widget.scale,
-                                top: -6 * widget.scale,
-                                child: SvgPicture.asset(
-                                  'assets/dealer.svg',
-                                  width: 20 * widget.scale,
-                                  height: 20 * widget.scale,
-                                ),
-                              ),
+    if (isEliminated) return const SizedBox.shrink();
 
-                            // 4. ELIMINATED BADGE
-                            if (isEliminated)
-                              Positioned(
-                                right: -8 * widget.scale,
-                                top: -6 * widget.scale,
-                                child: _buildBadge('OUT', Colors.red),
-                              ),
+    final hasRevealedCards = widget.revealedCards?.containsKey(widget.email) == true;
+    final playerRevealedCards = hasRevealedCards ? widget.revealedCards![widget.email]! : <String>[];
 
-                            // 5. ACTION STATUS BADGE (NOWOŚĆ!)
-                            // Wyświetlamy status BEZPOŚREDNIO NA AVATARZE (na dole)
-                            if (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated)
+    if (hasRevealedCards && (widget.showingRevealedCards || widget.showingWinners) && playerRevealedCards.length == 2) {
+      return _buildRevealedCards(iconSize, aversCardHeight, aversCardWidth, aversCardSpacing, playerRevealedCards);
+    } else if (widget.showCards && !widget.isFolded) {
+      return _buildNormalCards(iconSize, cardHeight, cardWidth, cardSpacing);
+    } else {
+      return const SizedBox.shrink();
+    }
+  }
 
-                            // 5. ACTION STATUS BADGE (SUBTELNA WERSJA Z ANIMACJĄ)
-                              Positioned(
-                                bottom: -2 * widget.scale, // Lekka korekta pozycji, żeby ładniej nachodziło
-                                child: AnimatedOpacity(
-                                  // Logika: Jeśli jest akcja i gracz nie jest wyeliminowany -> pokaż (opacity 1.0)
-                                  // W przeciwnym razie -> ukryj płynnie (opacity 0.0)
-                                  opacity: (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated) ? 1.0 : 0.0,
-                                  duration: const Duration(milliseconds: 300), // Czas trwania animacji (np. 300ms)
-                                  curve: Curves.easeInOut, // Płynna krzywa animacji
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: 5 * widget.scale,
-                                      vertical: 1.5 * widget.scale,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      // ZMIANA: Dużo większa przeźroczystość tła (0.6 zamiast 0.9)
-                                      color: _getActionColor(widget.lastAction ?? '').withOpacity(0.6),
-                                      borderRadius: BorderRadius.circular(6 * widget.scale),
-                                      // ZMIANA: Cieńsze i półprzezroczyste obramowanie
-                                      border: Border.all(
-                                          color: Colors.white.withOpacity(0.5),
-                                          width: 0.5 * widget.scale
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.2), // Delikatniejszy cień
-                                          blurRadius: 3 * widget.scale,
-                                          offset: const Offset(0, 1),
-                                        )
-                                      ],
-                                    ),
-                                    child: Text(
-                                      // Używamy operatora ?? '', aby uniknąć błędu na nullu podczas animacji zanikania
-                                      (widget.lastAction ?? '').toUpperCase(),
-                                      style: TextStyle(
-                                          fontSize: 7.5 * widget.scale, // Minimalnie mniejsza czcionka
-                                          fontWeight: FontWeight.w800,
-                                          color: Colors.white.withOpacity(0.95), // Lekko złamana biel
-                                          letterSpacing: 0.3,
-                                          // Dodajemy delikatny cień do tekstu, żeby był czytelny na jasnym tle (np. żółty CHECK)
-                                          shadows: [
-                                            Shadow(blurRadius: 1, color: Colors.black.withOpacity(0.3), offset: const Offset(0, 0.5))
-                                          ]
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-
-                        // TEKSTY POD IKONĄ (Nick, Chips)
-                        SizedBox(height: 2 * widget.scale),
-                        Text(
-                          widget.nick,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 9.5 * widget.scale,
-                            fontWeight: FontWeight.w800,
-                            fontFamily: 'Roboto',
-                            color: widget.isActive ? Colors.yellow : Colors.white,
-                            shadows: const [
-                              Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54),
-                            ],
-                          ),
-                        ),
-                        if (!isEliminated) ...[
-                          Text(
-                            '${widget.chips}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 9 * widget.scale,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white70,
-                              shadows: const [
-                                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54),
-                              ],
-                            ),
-                          ),
-                          // Win Amount / Round Bets
-                          if (widget.showingWinners && isWinner && winSize != null && winSize > 0)
-                            Padding(
-                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
-                              child: Text(
-                                '+$winSize',
-                                style: TextStyle(
-                                  color: Colors.yellow,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10 * widget.scale,
-                                  shadows: [
-                                    const Shadow(blurRadius: 2, color: Colors.black54),
-                                    Shadow(blurRadius: 8 * widget.scale, color: Colors.yellow),
-                                  ],
-                                ),
-                              ),
-                            )
-                          else if (!widget.showingWinners && widget.chipsInRound > 0)
-                            Padding(
-                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
-                              child: Text(
-                                '+${widget.chipsInRound}',
-                                style: TextStyle(
-                                  color: Colors.greenAccent,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10 * widget.scale,
-                                  shadows: const [
-                                    Shadow(blurRadius: 2, color: Colors.black54)
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+  Widget _buildRevealedCards(double iconSize, double aversCardHeight, double aversCardWidth,
+      double aversCardSpacing, List<String> cards) {
+    final totalWidth = aversCardWidth * 2 + aversCardSpacing;
+    return Positioned(
+      bottom: iconSize * 0.1,
+      left: (iconSize - totalWidth) / 2,
+      child: SizedBox(
+        width: totalWidth,
+        height: aversCardHeight,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              child: PokerCardWidget(
+                  key: ValueKey('revealed-${widget.email}-${cards[0]}-front'),
+                  code: cards[0], height: aversCardHeight, showFront: true
+              ),
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              child: PokerCardWidget(
+                  key: ValueKey('revealed-${widget.email}-${cards[1]}-front'),
+                  code: cards[1], height: aversCardHeight, showFront: true
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Pomocnicza metoda dla Badge'a OUT
+  Widget _buildNormalCards(double iconSize, double cardHeight, double cardWidth, double cardSpacing) {
+    return Positioned(
+      bottom: iconSize * 0.1,
+      left: (iconSize - (cardWidth + cardSpacing)) / 2,
+      child: SizedBox(
+        width: cardWidth + cardSpacing,
+        height: cardHeight,
+        child: Stack(
+          children: [
+            Positioned(left: 0, child: _buildBackCard(cardWidth, cardHeight)),
+            Positioned(left: cardSpacing, child: _buildBackCard(cardWidth, cardHeight)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackCard(double w, double h) {
+    return Container(
+      width: w, height: h,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(h * 0.08),
+        border: Border.all(color: Colors.white.withOpacity(0.4), width: 0.3 * widget.scale),
+        boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 1.5 * widget.scale, offset: Offset(0, 0.8 * widget.scale))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(h * 0.08),
+        child: SvgPicture.asset('assets/card_revers.svg', width: w, height: h, fit: BoxFit.cover),
+      ),
+    );
+  }
+
+  // --- BRAKUJĄCA METODA POMOCNICZA DLA ODZNAKI "OUT" ---
   Widget _buildBadge(String text, Color color) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -350,176 +209,182 @@ class _OpponentWidgetState extends State<OpponentWidget>
     );
   }
 
-  // ... (reszta metod: _buildCardsDisplay, _buildRevealedCards itd. bez zmian)
-  // ZAKTUALIZOWANA METODA - Budowanie wyświetlania kart z obsługą eliminated
-  Widget _buildCardsDisplay(double iconSize, double cardHeight, double cardWidth, double cardSpacing,
-      double aversCardHeight, double aversCardWidth, double aversCardSpacing, bool isEliminated) {
+  // --- GŁÓWNA METODA BUILD ---
 
-    // NOWE - Wyeliminowani gracze NIE mają kart
-    if (isEliminated) {
-      print('Gracz ${widget.email} jest wyeliminowany - brak kart');
-      return const SizedBox.shrink();
+  @override
+  Widget build(BuildContext context) {
+    final isWinner = widget.winners.contains(widget.email) && widget.showingWinners;
+    final isEliminated = widget.eliminatedEmails.contains(widget.email);
+    final winSize = widget.winnerWinSizes[widget.email];
+
+    // Skalowanie wymiarów
+    final double iconSize = 50.0 * widget.scale;
+    final double cardHeight = 18.0 * widget.scale;
+    final double cardWidth = cardHeight * 0.7;
+    final double cardSpacing = cardWidth * 0.3;
+    final double aversCardHeight = cardHeight * 1.33;
+    final double aversCardWidth = aversCardHeight * 0.7;
+    final double aversCardSpacing = aversCardWidth * 0.15;
+
+    // Limit szerokości nicku dla uniknięcia ucięcia (max szerokość = 2.5x ikona)
+    final double maxTextWidth = iconSize * 2.5;
+
+    double calculateOpacity() {
+      if (isEliminated) return 0.5;
+      if (widget.isFolded) return 0.4;
+      return 1.0;
     }
 
-    // Sprawdź czy gracz ma karty do pokazania w revealed cards
-    final hasRevealedCards = widget.revealedCards?.containsKey(widget.email) == true;
-    final playerRevealedCards = hasRevealedCards ? widget.revealedCards![widget.email]! : <String>[];
+    return Align(
+      alignment: widget.alignment,
+      child: OverflowBox(
+        maxWidth: double.infinity,
+        child: AnimatedBuilder(
+          animation: _pulseAnimation ?? const AlwaysStoppedAnimation(1.0),
+          builder: (context, child) {
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Container z poświatą dla zwycięzcy
+                Container(
+                  decoration: isWinner ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(iconSize * 0.15),
+                    border: Border.all(
+                      color: Colors.yellow.withOpacity(_pulseAnimation?.value ?? 1.0),
+                      width: 3 * widget.scale,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.yellow.withOpacity((_pulseAnimation?.value ?? 1.0) * 0.6),
+                        blurRadius: 15 * widget.scale,
+                        spreadRadius: 3 * widget.scale,
+                      ),
+                    ],
+                  ) : null,
+                  child: Opacity(
+                    opacity: calculateOpacity(),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Stack: Ikona, Karty, Badges
+                        Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            // 1. IKONA
+                            SvgPicture.asset(
+                              'assets/player.svg',
+                              width: iconSize,
+                              height: iconSize,
+                              fit: BoxFit.contain,
+                            ),
 
-    print('_buildCardsDisplay dla ${widget.email}: hasRevealedCards=$hasRevealedCards, showingRevealedCards=${widget.showingRevealedCards}, showingWinners=${widget.showingWinners}, playerRevealedCards=$playerRevealedCards, showCards=${widget.showCards}, isFolded=${widget.isFolded}');
+                            // 2. KARTY
+                            _buildCardsDisplay(iconSize, cardHeight, cardWidth, cardSpacing,
+                                aversCardHeight, aversCardWidth, aversCardSpacing, isEliminated),
 
-    // POPRAWKA: Karty avers widoczne podczas CAŁEGO SHOWDOWN (revealed cards + winners phase)
-    if (hasRevealedCards && (widget.showingRevealedCards || widget.showingWinners) && playerRevealedCards.length == 2) {
-      // POKAZUJ KARTY AVERS z flip animation
-      print('Pokazuję karty avers dla ${widget.email}: $playerRevealedCards');
-      return _buildRevealedCards(iconSize, aversCardHeight, aversCardWidth, aversCardSpacing, playerRevealedCards);
-    } else if (widget.showCards && !widget.isFolded) {
-      // POKAZUJ NORMALE KARTY TYŁEM (jak wcześniej)
-      print('Pokazuję normale karty tyłem dla ${widget.email}');
-      return _buildNormalCards(iconSize, cardHeight, cardWidth, cardSpacing);
-    } else {
-      // BRAK KART
-      print('Brak kart dla ${widget.email}');
-      return const SizedBox.shrink();
-    }
-  }
+                            // 3. DEALER
+                            if (widget.isDealer)
+                              Positioned(
+                                left: -8 * widget.scale,
+                                top: -6 * widget.scale,
+                                child: SvgPicture.asset('assets/dealer.svg', width: 20 * widget.scale, height: 20 * widget.scale),
+                              ),
 
-  // NOWA METODA - Budowanie kart avers (revealed) - UPROSZCZONA bez FlipCard
-  Widget _buildRevealedCards(double iconSize, double aversCardHeight, double aversCardWidth,
-      double aversCardSpacing, List<String> cards) {
-    final totalWidth = aversCardWidth * 2 + aversCardSpacing;
+                            // 4. ELIMINATED
+                            if (isEliminated)
+                              Positioned(
+                                right: -8 * widget.scale,
+                                top: -6 * widget.scale,
+                                child: _buildBadge('OUT', Colors.red),
+                              ),
 
-    print('_buildRevealedCards: iconSize=$iconSize, totalWidth=$totalWidth, aversCardHeight=$aversCardHeight, cards=$cards');
+                            // 5. ACTION STATUS BADGE (Subtelna pigułka z animacją)
+                            Positioned(
+                              bottom: -4 * widget.scale,
+                              child: AnimatedOpacity(
+                                opacity: (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated) ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 5 * widget.scale, vertical: 1.5 * widget.scale),
+                                  decoration: BoxDecoration(
+                                    // Półprzezroczyste tło
+                                    color: _getActionColor(widget.lastAction ?? '').withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(6 * widget.scale),
+                                    // Subtelna ramka
+                                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 0.5 * widget.scale),
+                                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2 * widget.scale, offset: const Offset(0, 1))],
+                                  ),
+                                  child: Text(
+                                    (widget.lastAction ?? '').toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 7.5 * widget.scale,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white.withOpacity(0.95),
+                                        letterSpacing: 0.3,
+                                        shadows: [Shadow(blurRadius: 1, color: Colors.black38, offset: const Offset(0, 0.5))]
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
 
-    return Positioned(
-      bottom: iconSize * 0.1,
-      left: (iconSize - totalWidth) / 2, // Centruj względem ikony
-      child: SizedBox(
-        width: totalWidth,
-        height: aversCardHeight,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            // Pierwsza karta avers - PROSTA implementacja bez FlipCard
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              child: PokerCardWidget(
-                key: ValueKey('revealed-${widget.email}-${cards[0]}-front'),
-                code: cards[0],
-                height: aversCardHeight,
-                showFront: true,
-              ),
-            ),
+                        SizedBox(height: 4 * widget.scale), // Odstęp
 
-            // Druga karta avers - PROSTA implementacja bez FlipCard
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 500),
-              child: PokerCardWidget(
-                key: ValueKey('revealed-${widget.email}-${cards[1]}-front'),
-                code: cards[1],
-                height: aversCardHeight,
-                showFront: true,
-              ),
-            ),
-          ],
+                        // 6. NICK (Zabezpieczony przed ucięciem - ellipsis)
+                        SizedBox(
+                          width: maxTextWidth, // Wymuszenie max szerokości
+                          child: Text(
+                            widget.nick,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis, // Kropki na końcu
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 9.5 * widget.scale,
+                              fontWeight: FontWeight.w800,
+                              fontFamily: 'Roboto',
+                              color: widget.isActive ? Colors.yellow : Colors.white,
+                              shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
+                            ),
+                          ),
+                        ),
+
+                        // 7. CHIPS & WIN AMOUNT
+                        if (!isEliminated) ...[
+                          Text(
+                            '${widget.chips}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 9 * widget.scale,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white70,
+                              shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
+                            ),
+                          ),
+                          if (widget.showingWinners && isWinner && winSize != null && winSize > 0)
+                            Padding(
+                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
+                              child: Text('+$winSize', style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold, fontSize: 10 * widget.scale, shadows: [const Shadow(blurRadius: 2, color: Colors.black54), Shadow(blurRadius: 8 * widget.scale, color: Colors.yellow)])),
+                            )
+                          else if (!widget.showingWinners && widget.chipsInRound > 0)
+                            Padding(
+                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
+                              child: Text('+${widget.chipsInRound}', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 10 * widget.scale, shadows: const [Shadow(blurRadius: 2, color: Colors.black54)])),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
-  }
-
-  // NOWA METODA - Budowanie normalnych kart tyłem (istniejąca logika)
-  Widget _buildNormalCards(double iconSize, double cardHeight, double cardWidth, double cardSpacing) {
-    return Positioned(
-      bottom: iconSize * 0.1,
-      left: (iconSize - (cardWidth + cardSpacing)) / 2,
-      child: SizedBox(
-        width: cardWidth + cardSpacing,
-        height: cardHeight,
-        child: Stack(
-          children: [
-            // Pierwsza karta
-            Positioned(
-              left: 0,
-              child: Container(
-                width: cardWidth,
-                height: cardHeight,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(cardHeight * 0.08),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.4),
-                    width: 0.3 * widget.scale,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 1.5 * widget.scale,
-                      offset: Offset(0, 0.8 * widget.scale),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(cardHeight * 0.08),
-                  child: SvgPicture.asset(
-                    'assets/card_revers.svg',
-                    width: cardWidth,
-                    height: cardHeight,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ),
-            // Druga karta
-            Positioned(
-              left: cardSpacing,
-              child: Container(
-                width: cardWidth,
-                height: cardHeight,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(cardHeight * 0.08),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.4),
-                    width: 0.3 * widget.scale,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 1.5 * widget.scale,
-                      offset: Offset(0, 0.8 * widget.scale),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(cardHeight * 0.08),
-                  child: SvgPicture.asset(
-                    'assets/card_revers.svg',
-                    width: cardWidth,
-                    height: cardHeight,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Pomocnicza metoda do określenia koloru akcji
-  Color _getActionColor(String action) {
-    switch (action.toUpperCase()) {
-      case 'FOLD':
-        return const Color(0xFFD32F2F); // Czerwony
-      case 'CHECK':
-        return const Color(0xFF1976D2); // Niebieski
-      case 'CALL':
-        return const Color(0xFF1976D2); // Niebieski
-      case 'RAISE':
-      case 'RISE':
-        return const Color(0xFF388E3C); // Zielony
-      case 'ALL_IN':
-        return const Color(0xFFFF9800); // Pomarańczowy
-      default:
-        return const Color(0xFF616161); // Szary
-    }
   }
 }
