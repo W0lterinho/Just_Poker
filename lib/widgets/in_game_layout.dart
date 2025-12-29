@@ -213,6 +213,8 @@ class InGameLayout extends StatelessWidget {
             child: ActionButtonsWidget(
               canCheck: nextPlayerToCall == 0,
               callAmount: nextPlayerToCall,
+              // NOWE: Sprawdzamy czy kwota do sprawdzenia jest >= naszym żetonom
+              isAllIn: nextPlayerToCall >= myChips,
               onFold: onFold ?? () {},
               onCheckCall: onCheckCall ?? () {},
               onRaise: onShowRaiseSlider ?? () {},

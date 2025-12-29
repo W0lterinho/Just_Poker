@@ -1425,12 +1425,14 @@ class GameCubit extends Cubit<GameState> {
     print('=== POKAZYWANIE KART GRACZY ===');
     print('Ustawiam revealedCards: $cardsMap');
 
-    // WAŻNE - Czyścimy lastAction I roundBets podczas pokazywania kart
+    // POPRAWKA: Nie czyścimy lastAction ani roundBets.
+    // Dzięki temu przy ALL-IN nadal widzimy napis "ALL IN" i kwotę zakładu obok kart.
+    // Zapobiega to też potencjalnym błędom UI wynikającym z braku danych o zakładach aktywnych graczy.
     updateState(
       revealedCards: cardsMap,
       showingRevealedCards: true,
-      lastAction: {}, // Czyść akcje podczas pokazywania kart
-      roundBets: {}, // NOWE - Czyść zakłady podczas pokazywania kart
+      // lastAction: {}, // USUNIĘTE - nie czyścimy akcji (chcemy widzieć "ALL IN")
+      // roundBets: {},  // USUNIĘTE - nie czyścimy zakładów (chcemy widzieć ile wrzucił)
       recalculateMyTurn: false,
     );
 
@@ -1439,19 +1441,28 @@ class GameCubit extends Cubit<GameState> {
     // Anuluj poprzedni timer jeśli istnieje
     _revealedCardsTimer?.cancel();
 
-    // 4 sekundy na pokazywanie kart
+    // 4 sekundy na pokazywanie kart (faza wstępna Showdown)
     _revealedCardsTimer = Timer(const Duration(seconds: 4), () {
-      print('Koniec pokazywania kart graczy');
-      updateState(
-        showingRevealedCards: false,
-        recalculateMyTurn: false,
-      );
+      print('Timer 4s minął w _showRevealedCards');
 
-      // NOWA LOGIKA - Sprawdź czy są pending showdown cards
+      // Sprawdzamy, czy mamy dodatkowe karty do wyłożenia na stół (sytuacja All-In przed Riverem).
       if (_pendingShowdownCards.isNotEmpty) {
-        print('Są pending showdown cards: $_pendingShowdownCards - rozpoczynam dodawanie');
+        print('Są pending showdown cards ($_pendingShowdownCards) - NIE ukrywam kart graczy, utrzymuję showingRevealedCards = true');
+
+        // NIE wywołujemy updateState(showingRevealedCards: false)!
+        // Karty muszą zostać widoczne podczas dokładania Flopa/Turna/Rivera.
+
         _addShowdownCardsSequentiallyAndThenShowWinners();
       } else {
+        // Standardowa sytuacja (River już był) - kończymy fazę pokazywania kart
+        // i przechodzimy do wskazywania zwycięzców.
+        print('Brak pending showdown cards - kończę fazę revealedCards i pokazuję zwycięzców');
+
+        updateState(
+          showingRevealedCards: false,
+          recalculateMyTurn: false,
+        );
+
         // Sprawdź czy są oczekujący zwycięzcy
         if (_pendingWinners.isNotEmpty) {
           print('Są oczekujący zwycięzcy: ${_pendingWinners.length} - pokazuję ich teraz');
@@ -1871,6 +1882,17 @@ class GameCubit extends Cubit<GameState> {
     int? chipsInRound,
     String? action,
   }) {
+    // 1. Obliczamy stare żetony w rundzie (żeby sprawdzić czy wzrosły)
+    final oldChipsInRound = state.roundBets[email] ?? 0;
+    final newChipsInRound = chipsInRound ?? oldChipsInRound;
+    // 2. Ustalamy właściwą nazwę akcji do wyświetlenia
+    String effectiveAction = action ?? '';
+    // NAPRAWA: Jeśli serwer przysłał CHECK, ale gracz dołożył żetony -> to jest CALL
+    if (action == 'CHECK' && newChipsInRound > oldChipsInRound) {
+      effectiveAction = 'CALL';
+    }
+
+    // 3. Aktualizujemy graczy (Players & AllPlayers)
     final updatedPlayers = state.players.map((p) {
       if (p.email == email) {
         return p.copyWith(
@@ -1893,22 +1915,22 @@ class GameCubit extends Cubit<GameState> {
       return p;
     }).toList();
 
+    // 4. Aktualizujemy lokalnego gracza (jeśli to my)
     int? myChips = state.myChips;
     if (email == state.localEmail) {
       myChips = chipsLeft ?? myChips;
     }
 
+    // 5. Aktualizujemy LastAction (używając effectiveAction!)
     final lastAction = {...state.lastAction};
-    if (action != null && action.isNotEmpty) {
-      lastAction[email] = action;
-      print('Zaktualizowano lastAction dla $email: $action');
-
+    if (effectiveAction.isNotEmpty) {
+      lastAction[email] = effectiveAction;
+      print('Zaktualizowano lastAction dla $email: $effectiveAction (Oryginał z serwera: $action)');
       // Odtwórz dźwięk dla akcji innych graczy (nie naszych)
       if (email != state.localEmail) {
-        _playActionSound(action);
+        _playActionSound(effectiveAction);
       }
-
-      // NOWE - Uruchom timer do usunięcia akcji po 4 sekundach (tylko dla innych graczy)
+      // Timer do usunięcia akcji po 3 sekundach
       if (email != state.localEmail) {
         _startActionRemovalTimer(email);
       }
@@ -2250,18 +2272,40 @@ class GameCubit extends Cubit<GameState> {
         return;
       }
 
-      // Określamy ile żetonów trzeba wysłać
-      final chipsToSend = state.nextPlayerToCall; // 0 dla CHECK, >0 dla CALL
-      final isCall = chipsToSend > 0;
-      final actionName = isCall ? 'CALL' : 'CHECK';
+      // 1. Pobieramy kwotę wymaganą do sprawdzenia
+      int chipsToSend = state.nextPlayerToCall;
 
-      // Odtwórz odpowiedni dźwięk
-      await _playActionSound(actionName);
+      // 2. Pobieramy nasze dostępne żetony
+      final myCurrentChips = state.myChips;
 
-      print('Wysyłam akcję $actionName - email: $mail, tableCode: $tableCode, chips: $chipsToSend');
+      // Zmienne do określenia co wysłać, a co odegrać
+      String serverAction; // To pójdzie w DTO do backendu
+      String soundAction;  // To posłuży do wyboru pliku mp3
+
+      // 3. Logika określania akcji
+      if (chipsToSend == 0) {
+        // CZYSTY CHECK (stukanie w stół)
+        serverAction = 'CHECK';
+        soundAction = 'CHECK';
+      } else if (chipsToSend >= myCurrentChips) {
+        // ALL IN (gdy musimy dać więcej lub tyle ile mamy)
+        serverAction = 'ALL_IN';
+        soundAction = 'ALL_IN';
+        chipsToSend = myCurrentChips; // Nie możemy dać więcej niż mamy
+      } else {
+        // CALL (Standardowe sprawdzenie)
+        // Backend wymaga "CHECK" z wartością żetonów, ale dla gracza to CALL
+        serverAction = 'CHECK';
+        soundAction = 'CALL';
+      }
+
+      // Odtwórz dźwięk (używamy soundAction, żeby przy CALL był dźwięk żetonów)
+      await _playActionSound(soundAction);
+
+      print('Wysyłam akcję "$serverAction" (dźwięk: $soundAction) - email: $mail, chips: $chipsToSend');
 
       final dto = ActionDTO(
-        action: "CHECK",
+        action: serverAction, // <--- Tutaj idzie CHECK (dla Call) lub ALL_IN
         playerEmail: mail,
         chips: chipsToSend,
         tableName: null,
@@ -2274,15 +2318,15 @@ class GameCubit extends Cubit<GameState> {
             (d) => d.toJson(),
             (r) => r,
       );
-      // NOWE - Stop action timer
+
+      // Stop action timer
       _stopActionTimer();
       // Ukrywamy przyciski akcji
       updateState(isMyTurn: false, showingRaiseSlider: false, recalculateMyTurn: false);
 
-      print('Akcja $actionName wysłana pomyślnie');
+      print('Akcja $serverAction wysłana pomyślnie');
     } catch (e) {
-      print('Błąd podczas wysyłania akcji CHECK/CALL: $e');
-      // W przypadku błędu i tak ukrywamy przyciski
+      print('Błąd podczas wysyłania akcji CHECK/CALL/ALL_IN: $e');
       updateState(isMyTurn: false, showingRaiseSlider: false, recalculateMyTurn: false);
     }
   }

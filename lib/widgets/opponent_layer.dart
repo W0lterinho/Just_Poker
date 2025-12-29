@@ -50,9 +50,9 @@ class OpponentLayer extends StatelessWidget {
 
   // 3 Przeciwników (Total: 4) - Łuk Górny
   static const List<Alignment> _layout3 = [
-    Alignment(-0.72, -0.35), // Left Side High
+    Alignment(-0.68, -0.35), // Left Side High
     Alignment(0.0, -0.90),   // Top Center
-    Alignment(0.72, -0.35),  // Right Side High
+    Alignment(0.68, -0.35),  // Right Side High
   ];
 
   // 4 Przeciwników (Total: 5) - Trapez (To naprawia problem ucinania przy 5 graczach)
