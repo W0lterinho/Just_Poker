@@ -128,7 +128,7 @@ class InGameLayout extends StatelessWidget {
 
     // 3. Pozycja Przycisków Akcji / Suwaka - TUŻ NAD KARTAMI
     // offset = margines dolny + wysokość kart + mały odstęp
-    final actionsBottomPos = cardsBottomPos + cardHeight + 12;
+    final actionsBottomPos = cardsBottomPos + cardHeight + 4;
 
     // 4. Pozycja napisu wygranej (jeszcze wyżej)
     final winSizeBottomPos = actionsBottomPos + 60;
@@ -269,7 +269,7 @@ class InGameLayout extends StatelessWidget {
                 if (isDealer)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
-                    child: SvgPicture.asset('assets/dealer.svg', width: 26, height: 26),
+                    child: SvgPicture.asset('assets/dealer.svg', width: 46, height: 46),
                   ),
 
                 // Timer (tylko w mojej turze)
@@ -292,7 +292,7 @@ class InGameLayout extends StatelessWidget {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: SvgPicture.asset('assets/chips.svg', width: 24, height: 24),
+                  child: SvgPicture.asset('assets/chips.svg', width: 44, height: 44),
                 ),
                 Text(
                   '${localPlayer?.chips ?? myChips}',

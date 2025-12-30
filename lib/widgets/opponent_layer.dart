@@ -57,10 +57,10 @@ class OpponentLayer extends StatelessWidget {
 
   // 4 Przeciwników (Total: 5) - Trapez (To naprawia problem ucinania przy 5 graczach)
   static const List<Alignment> _layout4 = [
-    Alignment(-0.8, 0.0), // Left Side Low (nadal wysoko, ale niżej niż góra)
+    Alignment(-0.8, 0.1), // Left Side Low (nadal wysoko, ale niżej niż góra)
     Alignment(-0.50, -0.85), // Top Left
     Alignment(0.50, -0.85),  // Top Right
-    Alignment(0.8, 0.0),  // Right Side Low
+    Alignment(0.8, 0.1),  // Right Side Low
   ];
 
   // 5 Przeciwników (Total: 6) - Pięciokąt (Naprawia problem 6 graczy)
@@ -74,12 +74,12 @@ class OpponentLayer extends StatelessWidget {
 
   // 6 Przeciwników (Total: 7)
   static const List<Alignment> _layout6 = [
-    Alignment(-0.7, 0.20),  // Left Side Low
+    Alignment(-0.65, 0.19),  // Left Side Low
     Alignment(-0.72, -0.35), // Left Side High
     Alignment(-0.45, -0.90), // Top Left Center
     Alignment(0.45, -0.90),  // Top Right Center
     Alignment(0.72, -0.35),  // Right Side High
-    Alignment(0.7, 0.20),   // Right Side Low
+    Alignment(0.65, 0.2),   // Right Side Low
   ];
 
   // 7 Przeciwników (Total: 8 - MAX) - Pełny Ring

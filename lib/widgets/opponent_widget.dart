@@ -65,7 +65,8 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    _pulseAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(
+    // Animacja pulsuje od 0.0 do 1.0
+    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
       parent: _pulseController!,
       curve: Curves.easeInOut,
     ));
@@ -104,7 +105,6 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
   }
 
   // --- METODY BUDUJĄCE KARTY ---
-
   Widget _buildCardsDisplay(double iconSize, double cardHeight, double cardWidth, double cardSpacing,
       double aversCardHeight, double aversCardWidth, double aversCardSpacing, bool isEliminated) {
 
@@ -186,7 +186,6 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
     );
   }
 
-  // --- BRAKUJĄCA METODA POMOCNICZA DLA ODZNAKI "OUT" ---
   Widget _buildBadge(String text, Color color) {
     return Container(
       padding: EdgeInsets.symmetric(
@@ -213,11 +212,13 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    // Uwaga: isWinner używamy teraz do sterowania animacją wewnątrz Stacka,
+    // a nie do ramki na zewnątrz.
     final isWinner = widget.winners.contains(widget.email) && widget.showingWinners;
     final isEliminated = widget.eliminatedEmails.contains(widget.email);
-    final winSize = widget.winnerWinSizes[widget.email];
+    // winSize jest dostępne, ale na prośbę użytkownika na razie nie wyświetlamy go tekstowo w nowym miejscu
+    // final winSize = widget.winnerWinSizes[widget.email];
 
-    // Skalowanie wymiarów
     final double iconSize = 50.0 * widget.scale;
     final double cardHeight = 18.0 * widget.scale;
     final double cardWidth = cardHeight * 0.7;
@@ -225,8 +226,6 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
     final double aversCardHeight = cardHeight * 1.33;
     final double aversCardWidth = aversCardHeight * 0.7;
     final double aversCardSpacing = aversCardWidth * 0.15;
-
-    // Limit szerokości nicku dla uniknięcia ucięcia (max szerokość = 2.5x ikona)
     final double maxTextWidth = iconSize * 2.5;
 
     double calculateOpacity() {
@@ -240,146 +239,144 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
       child: OverflowBox(
         maxWidth: double.infinity,
         child: AnimatedBuilder(
-          animation: _pulseAnimation ?? const AlwaysStoppedAnimation(1.0),
+          animation: _pulseAnimation ?? const AlwaysStoppedAnimation(0.0),
           builder: (context, child) {
-            return Stack(
-              clipBehavior: Clip.none,
+            final pulseValue = _pulseAnimation?.value ?? 0.0;
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Container z poświatą dla zwycięzcy
-                Container(
-                  decoration: isWinner ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(iconSize * 0.15),
-                    border: Border.all(
-                      color: Colors.yellow.withOpacity(_pulseAnimation?.value ?? 1.0),
-                      width: 3 * widget.scale,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.yellow.withOpacity((_pulseAnimation?.value ?? 1.0) * 0.6),
-                        blurRadius: 15 * widget.scale,
-                        spreadRadius: 3 * widget.scale,
+                // Stack: Glow, Ikona, Karty, Badges
+                Opacity(
+                  opacity: calculateOpacity(),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      // 0. NOWOŚĆ - AUREOLA ZWYCIĘZCY (GLOW)
+                      // Renderujemy ją TYLKO gdy jest zwycięzcą
+                      if (isWinner)
+                        Positioned(
+                          // Centrujemy względem ikony
+                          child: Container(
+                            width: iconSize * 0.9,
+                            height: iconSize * 0.9,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.orangeAccent.withOpacity(0.6 * pulseValue + 0.2),
+                                  blurRadius: 20 * widget.scale + (10 * pulseValue),
+                                  spreadRadius: 5 * widget.scale + (10 * pulseValue),
+                                ),
+                                BoxShadow(
+                                  color: Colors.yellow.withOpacity(0.4 * pulseValue),
+                                  blurRadius: 10 * widget.scale,
+                                  spreadRadius: 2 * widget.scale,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // 1. IKONA GRACZA
+                      SvgPicture.asset(
+                        'assets/player.svg',
+                        width: iconSize,
+                        height: iconSize,
+                        fit: BoxFit.contain,
+                      ),
+
+                      // 2. KARTY
+                      _buildCardsDisplay(iconSize, cardHeight, cardWidth, cardSpacing,
+                          aversCardHeight, aversCardWidth, aversCardSpacing, isEliminated),
+
+                      // 3. DEALER
+                      if (widget.isDealer)
+                        Positioned(
+                          left: -8 * widget.scale,
+                          top: -6 * widget.scale,
+                          child: SvgPicture.asset('assets/dealer.svg', width: 20 * widget.scale, height: 20 * widget.scale),
+                        ),
+
+                      // 4. ELIMINATED
+                      if (isEliminated)
+                        Positioned(
+                          right: -8 * widget.scale,
+                          top: -6 * widget.scale,
+                          child: _buildBadge('OUT', Colors.red),
+                        ),
+
+                      // 5. ACTION STATUS BADGE
+                      Positioned(
+                        bottom: -4 * widget.scale,
+                        child: AnimatedOpacity(
+                          opacity: (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated) ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 5 * widget.scale, vertical: 1.5 * widget.scale),
+                            decoration: BoxDecoration(
+                              color: _getActionColor(widget.lastAction ?? '').withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(6 * widget.scale),
+                              border: Border.all(color: Colors.white.withOpacity(0.5), width: 0.5 * widget.scale),
+                            ),
+                            child: Text(
+                              (widget.lastAction ?? '').toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 7.5 * widget.scale,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white.withOpacity(0.95),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
-                  ) : null,
-                  child: Opacity(
-                    opacity: calculateOpacity(),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Stack: Ikona, Karty, Badges
-                        Stack(
-                          clipBehavior: Clip.none,
-                          alignment: Alignment.center,
-                          children: [
-                            // 1. IKONA
-                            SvgPicture.asset(
-                              'assets/player.svg',
-                              width: iconSize,
-                              height: iconSize,
-                              fit: BoxFit.contain,
-                            ),
+                  ),
+                ),
 
-                            // 2. KARTY
-                            _buildCardsDisplay(iconSize, cardHeight, cardWidth, cardSpacing,
-                                aversCardHeight, aversCardWidth, aversCardSpacing, isEliminated),
+                SizedBox(height: 4 * widget.scale),
 
-                            // 3. DEALER
-                            if (widget.isDealer)
-                              Positioned(
-                                left: -8 * widget.scale,
-                                top: -6 * widget.scale,
-                                child: SvgPicture.asset('assets/dealer.svg', width: 20 * widget.scale, height: 20 * widget.scale),
-                              ),
-
-                            // 4. ELIMINATED
-                            if (isEliminated)
-                              Positioned(
-                                right: -8 * widget.scale,
-                                top: -6 * widget.scale,
-                                child: _buildBadge('OUT', Colors.red),
-                              ),
-
-                            // 5. ACTION STATUS BADGE (Subtelna pigułka z animacją)
-                            Positioned(
-                              bottom: -4 * widget.scale,
-                              child: AnimatedOpacity(
-                                opacity: (widget.lastAction != null && widget.lastAction!.isNotEmpty && !isEliminated) ? 1.0 : 0.0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 5 * widget.scale, vertical: 1.5 * widget.scale),
-                                  decoration: BoxDecoration(
-                                    // Półprzezroczyste tło
-                                    color: _getActionColor(widget.lastAction ?? '').withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(6 * widget.scale),
-                                    // Subtelna ramka
-                                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 0.5 * widget.scale),
-                                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2 * widget.scale, offset: const Offset(0, 1))],
-                                  ),
-                                  child: Text(
-                                    (widget.lastAction ?? '').toUpperCase(),
-                                    style: TextStyle(
-                                        fontSize: 7.5 * widget.scale,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white.withOpacity(0.95),
-                                        letterSpacing: 0.3,
-                                        shadows: [Shadow(blurRadius: 1, color: Colors.black38, offset: const Offset(0, 0.5))]
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        SizedBox(height: 4 * widget.scale), // Odstęp
-
-                        // 6. NICK (Zabezpieczony przed ucięciem - ellipsis)
-                        SizedBox(
-                          width: maxTextWidth, // Wymuszenie max szerokości
-                          child: Text(
-                            widget.nick,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis, // Kropki na końcu
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 9.5 * widget.scale,
-                              fontWeight: FontWeight.w800,
-                              fontFamily: 'Roboto',
-                              color: widget.isActive ? Colors.yellow : Colors.white,
-                              shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
-                            ),
-                          ),
-                        ),
-
-                        // 7. CHIPS & WIN AMOUNT
-                        if (!isEliminated) ...[
-                          Text(
-                            '${widget.chips}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 9 * widget.scale,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white70,
-                              shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
-                            ),
-                          ),
-                          if (widget.showingWinners && isWinner && winSize != null && winSize > 0)
-                            Padding(
-                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
-                              child: Text('+$winSize', style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold, fontSize: 10 * widget.scale, shadows: [const Shadow(blurRadius: 2, color: Colors.black54), Shadow(blurRadius: 8 * widget.scale, color: Colors.yellow)])),
-                            )
-                          else if (!widget.showingWinners && widget.chipsInRound > 0)
-                            Padding(
-                              padding: EdgeInsets.only(top: 1.0 * widget.scale),
-                              child: Text('+${widget.chipsInRound}', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 10 * widget.scale, shadows: const [Shadow(blurRadius: 2, color: Colors.black54)])),
-                            ),
-                        ],
-                      ],
+                // 6. NICK
+                SizedBox(
+                  width: maxTextWidth,
+                  child: Text(
+                    widget.nick,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9.5 * widget.scale,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Roboto',
+                      color: widget.isActive ? Colors.yellow : Colors.white,
+                      shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
                     ),
                   ),
                 ),
+
+                // 7. CHIPS & WIN AMOUNT (Stara logika +X)
+                if (!isEliminated) ...[
+                  Text(
+                    '${widget.chips}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9 * widget.scale,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white70,
+                      shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black54)],
+                    ),
+                  ),
+                  // Tutaj nadal zostawiam mały tekst +X pod chipsami (jeśli chcesz go usunąć całkowicie, daj znać)
+                  // Ale prosiłeś o brak tekstu "o wygranej" w kontekście wielkiego komunikatu,
+                  // standardowe przyrosty żetonów są zazwyczaj pożądane.
+                  if (!widget.showingWinners && widget.chipsInRound > 0)
+                    Padding(
+                      padding: EdgeInsets.only(top: 1.0 * widget.scale),
+                      child: Text('+${widget.chipsInRound}', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 10 * widget.scale, shadows: const [Shadow(blurRadius: 2, color: Colors.black54)])),
+                    ),
+                ],
               ],
             );
           },
