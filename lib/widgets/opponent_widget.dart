@@ -223,7 +223,7 @@ class _OpponentWidgetState extends State<OpponentWidget> with TickerProviderStat
     final double cardHeight = 18.0 * widget.scale;
     final double cardWidth = cardHeight * 0.7;
     final double cardSpacing = cardWidth * 0.3;
-    final double aversCardHeight = cardHeight * 1.33;
+    final double aversCardHeight = cardHeight * 2.0;
     final double aversCardWidth = aversCardHeight * 0.7;
     final double aversCardSpacing = aversCardWidth * 0.15;
     final double maxTextWidth = iconSize * 2.5;

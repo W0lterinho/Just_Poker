@@ -1275,15 +1275,22 @@ class GameCubit extends Cubit<GameState> {
     }
   }
   // NOWE - ELIMINATION HANDLING METHODS
-
   void _handleEliminatedPlayers(List<String> eliminatedEmails) {
-    print('=== OBSŁUGA ELIMINATED PLAYERS ===');
+    print('=== OBSŁUGA ELIMINATED PLAYERS (NATYCHMIASTOWA) ===');
     print('Wyeliminowani gracze: $eliminatedEmails');
 
-    // Zapisz jako pending - zostaną zaktualizowani w _startNewRound()
-    _pendingEliminatedEmails = List<String>.from(eliminatedEmails);
-    print('Zapisano eliminated_players jako pending: $_pendingEliminatedEmails');
-    print('Gracze poczekają na aktualizację w nowej rundzie');
+    // 1. Pobierz obecną listę wyeliminowanych ze stanu
+    final currentEliminated = Set<String>.from(state.eliminatedEmails);
+
+    // 2. Dodaj nowych (Set automatycznie usunie duplikaty)
+    currentEliminated.addAll(eliminatedEmails);
+
+    // 3. Aktualizuj stan NATYCHMIAST, nie czekając na nową rundę
+    updateState(
+      eliminatedEmails: currentEliminated.toList(),
+      recalculateMyTurn: false,
+    );
+    _pendingEliminatedEmails.clear();
   }
 
   void _handleGameFinished(String? ultimateWinner) {
@@ -1759,10 +1766,6 @@ class GameCubit extends Cubit<GameState> {
     final resetPlayers = state.players.map((p) => p.copyWith(isFolded: false)).toList();
     final resetAllPlayers = state.allPlayers.map((p) => p.copyWith(isFolded: false)).toList();
 
-    // NOWE - Aktualizuj eliminatedEmails z pending data
-    final newEliminatedEmails = List<String>.from(_pendingEliminatedEmails);
-    _pendingEliminatedEmails.clear();
-
     updateState(
       winners: [],
       winnerWinSizes: {}, // NOWE - reset winSizes
@@ -1774,7 +1777,6 @@ class GameCubit extends Cubit<GameState> {
       // NOWE - Reset stanów rundy
       players: resetPlayers, // POPRAWKA: Reset isFolded
       allPlayers: resetAllPlayers, // POPRAWKA: Reset isFolded
-      eliminatedEmails: newEliminatedEmails, // NOWE: Aktualizuj eliminated players
       roundBets: {}, // Reset żetonów graczy w rundzie
       lastAction: {}, // Reset ostatnich akcji graczy
       dealerMail: null, // Reset dealera (przyjdzie nowy z serwera)
